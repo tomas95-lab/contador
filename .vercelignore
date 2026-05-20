@@ -1,0 +1,29 @@
+# Local environment variables
+.env
+.env.*
+!.env.example
+
+# ARCA / AFIP credentials and certificates
+*.key
+*.pem
+*.crt
+*.csr
+*.p12
+*.pfx
+*.cer
+*.der
+*.jks
+*.keystore
+certs/
+server/certs/
+.arca-cache/
+
+# Local outputs and logs
+node_modules/
+dist/
+dist-server/
+coverage/
+logs/
+*.log
+.codex-logs/
+.vercel/

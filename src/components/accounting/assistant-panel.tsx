@@ -1,0 +1,800 @@
+"use client"
+
+import * as React from "react"
+import {
+  FilePlus2Icon,
+  PlugZapIcon,
+  ReceiptTextIcon,
+  SendIcon,
+  SparklesIcon,
+  Trash2Icon,
+  XIcon,
+} from "lucide-react"
+
+import { FiscalProfileCard } from "@/components/accounting/fiscal-profile-card"
+import { MessageMarkdown } from "@/components/accounting/message-markdown"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
+import { fetchArcaHistoricalInvoices } from "@/lib/arca-api"
+import { requestAssistantReply } from "@/lib/ai-assistant"
+import {
+  formatARS,
+  formatPaymentDate,
+  getFinancialMetrics,
+} from "@/lib/accounting"
+import { cn } from "@/lib/utils"
+import type {
+  AssistantMessage,
+  IncomePayment,
+  TaxCategory,
+  UserFiscalProfile,
+} from "@/types/accounting"
+
+type AssistantPanelProps = {
+  payments: IncomePayment[]
+  category: TaxCategory
+  messages: AssistantMessage[]
+  profile: UserFiscalProfile
+  onAddMessage: (
+    message: Pick<AssistantMessage, "content" | "role">
+  ) => Promise<AssistantMessage>
+  onClearMessages: () => Promise<void>
+  onGenerateInvoice: (
+    payment: IncomePayment,
+    options?: {
+      invoiceType?: "C" | "E"
+      clientCuit?: string
+      clientName?: string
+      clientAddress?: string
+      clientTaxId?: string
+      destinationCountryCode?: number
+      receiverIvaConditionId?: number
+    }
+  ) => Promise<void>
+  onSaveProfile: (profile: UserFiscalProfile) => Promise<void>
+}
+
+type PendingInvoiceDraft = {
+  id: string
+  invoiceType: "C" | "E"
+  payment: IncomePayment
+}
+
+const ivaConditionOptions = [
+  { label: "Resp. inscripto", value: "1" },
+  { label: "Monotributo", value: "6" },
+  { label: "Exento", value: "4" },
+  { label: "Consumidor final", value: "5" },
+]
+
+export function AssistantPanel({
+  payments,
+  category,
+  messages,
+  onAddMessage,
+  onClearMessages,
+  onGenerateInvoice,
+  onSaveProfile,
+  profile,
+}: AssistantPanelProps) {
+  const [content, setContent] = React.useState("")
+  const [invoiceClientAddress, setInvoiceClientAddress] = React.useState("")
+  const [invoiceClientCuit, setInvoiceClientCuit] = React.useState("")
+  const [invoiceClientName, setInvoiceClientName] = React.useState("")
+  const [invoiceClientTaxId, setInvoiceClientTaxId] = React.useState("")
+  const [invoiceDestinationCountryCode, setInvoiceDestinationCountryCode] =
+    React.useState("")
+  const [invoiceError, setInvoiceError] = React.useState("")
+  const [invoiceIvaCondition, setInvoiceIvaCondition] = React.useState("1")
+  const [pendingInvoiceDraft, setPendingInvoiceDraft] =
+    React.useState<PendingInvoiceDraft | null>(null)
+  const [isClearing, setIsClearing] = React.useState(false)
+  const [isIssuingInvoice, setIsIssuingInvoice] = React.useState(false)
+  const [isQueryingArca, setIsQueryingArca] = React.useState(false)
+  const [isPending, setIsPending] = React.useState(false)
+  const metrics = getFinancialMetrics(payments, category)
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    const prompt = content.trim()
+
+    if (!prompt || isPending) {
+      return
+    }
+
+    setContent("")
+    setIsPending(true)
+
+    try {
+      const userMessage = await onAddMessage({
+        role: "user",
+        content: prompt,
+      })
+      let arcaContext: unknown
+      let assistantPrompt = prompt
+
+      if (shouldPrepareInvoice(prompt)) {
+        const candidate = findInvoiceCandidate(prompt, payments)
+
+        if (candidate.status === "found") {
+          const suggestedInvoiceType = inferInvoiceType(prompt, candidate.payment)
+
+          setPendingInvoiceDraft({
+            id: crypto.randomUUID(),
+            invoiceType: suggestedInvoiceType,
+            payment: candidate.payment,
+          })
+          setInvoiceClientAddress("")
+          setInvoiceClientCuit("")
+          setInvoiceClientName(candidate.payment.client)
+          setInvoiceClientTaxId("")
+          setInvoiceDestinationCountryCode("")
+          setInvoiceError("")
+          setInvoiceIvaCondition("1")
+          await onAddMessage({
+            role: "assistant",
+            content: [
+              `Preparé la Factura ${suggestedInvoiceType} para **${candidate.payment.client}** por **${formatARS(
+                candidate.payment.amount
+              )}**.`,
+              suggestedInvoiceType === "E"
+                ? "La marqué como exportación porque detecté exterior/exportación. Revisá los datos del cliente del exterior y confirmá la emisión en ARCA."
+                : "Revisá los datos abajo. Si corresponde, cargá CUIT del receptor y confirmá la emisión en ARCA.",
+            ].join("\n\n"),
+          })
+          return
+        }
+
+        await onAddMessage({
+          role: "assistant",
+          content: buildInvoiceCandidateMessage(candidate),
+        })
+        return
+      }
+
+      if (shouldUseArcaContext(prompt)) {
+        setIsQueryingArca(true)
+        try {
+          arcaContext = await fetchArcaHistoricalInvoices()
+          assistantPrompt = [
+            "La app consulto ARCA automaticamente en modo solo lectura.",
+            `Pregunta original: ${prompt}`,
+            "Responde usando los datos fiscales reales disponibles y aclara cualquier brecha si falta informacion.",
+          ].join("\n")
+        } catch (error) {
+          await onAddMessage({
+            role: "assistant",
+            content:
+              error instanceof Error
+                ? `Intente consultar ARCA automaticamente, pero fallo: ${error.message}`
+                : "Intente consultar ARCA automaticamente, pero fallo.",
+          })
+          return
+        } finally {
+          setIsQueryingArca(false)
+        }
+      }
+
+      const reply = await requestAssistantReply({
+        arcaContext,
+        content: assistantPrompt,
+        metrics,
+        messages: [...messages, userMessage],
+        profile,
+      })
+
+      await onAddMessage({
+        role: "assistant",
+        content: reply,
+      })
+    } finally {
+      setIsPending(false)
+    }
+  }
+
+  async function handleClearMessages() {
+    if (messages.length === 0 || isClearing) {
+      return
+    }
+
+    setIsClearing(true)
+    try {
+      await onClearMessages()
+      setPendingInvoiceDraft(null)
+    } finally {
+      setIsClearing(false)
+    }
+  }
+
+  async function handleEmitPreparedInvoice() {
+    if (!pendingInvoiceDraft || isIssuingInvoice) {
+      return
+    }
+
+    const latestPayment =
+      payments.find((payment) => payment.id === pendingInvoiceDraft.payment.id) ??
+      pendingInvoiceDraft.payment
+    const invoiceType = pendingInvoiceDraft.invoiceType
+
+    if (latestPayment.invoiceStatus !== "pendiente") {
+      await onAddMessage({
+        role: "assistant",
+        content:
+          "Ese cobro ya no figura como pendiente. No emito nada para evitar duplicar comprobantes.",
+      })
+      setPendingInvoiceDraft(null)
+      return
+    }
+
+    const clientCuit = invoiceClientCuit.trim()
+    const exportClientAddress = invoiceClientAddress.trim()
+    const exportClientName = invoiceClientName.trim()
+    const exportClientTaxId = invoiceClientTaxId.trim()
+    const destinationCountryCode = Number(invoiceDestinationCountryCode)
+
+    if (
+      invoiceType === "E" &&
+      (!exportClientName ||
+        !exportClientAddress ||
+        !Number.isInteger(destinationCountryCode) ||
+        destinationCountryCode <= 0)
+    ) {
+      setInvoiceError(
+        "Para Factura E necesito nombre, domicilio y codigo de pais destino del cliente del exterior."
+      )
+      return
+    }
+
+    const receiver = clientCuit
+      ? `CUIT receptor ${clientCuit}`
+      : invoiceType === "E"
+        ? `cliente exterior ${exportClientName}`
+        : "consumidor final"
+    const confirmed = window.confirm(
+      `Emitir Factura ${invoiceType} real en ARCA por ${formatARS(
+        latestPayment.amount
+      )} para ${latestPayment.client} (${receiver})?`
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    setIsIssuingInvoice(true)
+    setInvoiceError("")
+
+    try {
+      await onGenerateInvoice(latestPayment, {
+        invoiceType,
+        clientCuit: clientCuit || undefined,
+        clientName: invoiceType === "E" ? exportClientName : undefined,
+        clientAddress: invoiceType === "E" ? exportClientAddress : undefined,
+        clientTaxId: invoiceType === "E" ? exportClientTaxId : undefined,
+        destinationCountryCode:
+          invoiceType === "E" ? destinationCountryCode : undefined,
+        receiverIvaConditionId: clientCuit
+          ? Number(invoiceIvaCondition)
+          : undefined,
+      })
+      await onAddMessage({
+        role: "assistant",
+        content: `Listo: emití la Factura ${invoiceType} de **${latestPayment.client}** por **${formatARS(
+          latestPayment.amount
+        )}** y la guardé en la app.`,
+      })
+      setPendingInvoiceDraft(null)
+      setInvoiceClientAddress("")
+      setInvoiceClientCuit("")
+      setInvoiceClientName("")
+      setInvoiceClientTaxId("")
+      setInvoiceDestinationCountryCode("")
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "No se pudo emitir la factura en ARCA."
+
+      setInvoiceError(message)
+      await onAddMessage({
+        role: "assistant",
+        content: `No pude emitir la factura: ${message}`,
+      })
+    } finally {
+      setIsIssuingInvoice(false)
+    }
+  }
+
+  return (
+    <div className="grid gap-4 xl:grid-cols-[360px_1fr]">
+      <FiscalProfileCard onSave={onSaveProfile} profile={profile} />
+      <Card className="flex min-h-[680px] w-full rounded-lg shadow-none">
+        <CardHeader className="border-b">
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle className="flex items-center gap-2">
+              <SparklesIcon className="size-4 text-emerald-500" />
+              Asistente IA
+            </CardTitle>
+            <Button
+              disabled={messages.length === 0 || isClearing}
+              onClick={handleClearMessages}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <Trash2Icon />
+              Limpiar
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="flex-1 overflow-y-auto p-4">
+          <div className="space-y-4">
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                className={cn(
+                  "flex",
+                  message.role === "user" ? "justify-end" : "justify-start"
+                )}
+              >
+                <div
+                  className={cn(
+                    "max-w-[78%] rounded-lg border px-3 py-2 text-sm shadow-xs",
+                    message.role === "user"
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "bg-card"
+                  )}
+                >
+                  <MessageMarkdown
+                    content={message.content}
+                    inverted={message.role === "user"}
+                  />
+                  <div
+                    className={cn(
+                      "mt-2 text-[11px]",
+                      message.role === "user"
+                        ? "text-primary-foreground/70"
+                        : "text-muted-foreground"
+                    )}
+                  >
+                    {message.timestamp}
+                  </div>
+                </div>
+              </div>
+            ))}
+            {isPending && (
+              <div className="flex justify-start">
+                <div className="rounded-lg border bg-card px-3 py-2 text-sm text-muted-foreground">
+                  <span className="inline-flex items-center gap-2">
+                    {isQueryingArca ? <PlugZapIcon className="size-4" /> : null}
+                    {isQueryingArca ? "Consultando ARCA..." : "Pensando..."}
+                  </span>
+                </div>
+              </div>
+            )}
+            {pendingInvoiceDraft ? (
+              <PreparedInvoiceCard
+                clientAddress={invoiceClientAddress}
+                clientCuit={invoiceClientCuit}
+                clientName={invoiceClientName}
+                clientTaxId={invoiceClientTaxId}
+                destinationCountryCode={invoiceDestinationCountryCode}
+                error={invoiceError}
+                invoiceType={pendingInvoiceDraft.invoiceType}
+                isIssuing={isIssuingInvoice}
+                ivaCondition={invoiceIvaCondition}
+                onCancel={() => {
+                  setPendingInvoiceDraft(null)
+                  setInvoiceError("")
+                }}
+                onClientCuitChange={(value) =>
+                  setInvoiceClientCuit(value.replace(/\D/g, "").slice(0, 11))
+                }
+                onClientAddressChange={setInvoiceClientAddress}
+                onClientNameChange={setInvoiceClientName}
+                onClientTaxIdChange={setInvoiceClientTaxId}
+                onDestinationCountryCodeChange={(value) =>
+                  setInvoiceDestinationCountryCode(
+                    value.replace(/\D/g, "").slice(0, 3)
+                  )
+                }
+                onEmit={() => void handleEmitPreparedInvoice()}
+                onInvoiceTypeChange={(invoiceType) =>
+                  setPendingInvoiceDraft((current) =>
+                    current
+                      ? {
+                          ...current,
+                          invoiceType,
+                        }
+                      : current
+                  )
+                }
+                onIvaConditionChange={setInvoiceIvaCondition}
+                payment={pendingInvoiceDraft.payment}
+              />
+            ) : null}
+          </div>
+        </CardContent>
+        <CardFooter className="border-t bg-background p-4">
+          <form className="flex w-full gap-2" onSubmit={handleSubmit}>
+            <Textarea
+              className="min-h-10 flex-1"
+              placeholder="Preguntar o pedir: facturá el cobro de Cuatro Cafe"
+              value={content}
+              onChange={(event) => setContent(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault()
+                  event.currentTarget.form?.requestSubmit()
+                }
+              }}
+            />
+            <Button
+              className="self-end"
+              disabled={!content.trim() || isPending}
+              size="icon"
+              type="submit"
+            >
+              <SendIcon />
+              <span className="sr-only">Enviar</span>
+            </Button>
+          </form>
+        </CardFooter>
+      </Card>
+    </div>
+  )
+}
+
+function PreparedInvoiceCard({
+  clientAddress,
+  clientCuit,
+  clientName,
+  clientTaxId,
+  destinationCountryCode,
+  error,
+  invoiceType,
+  isIssuing,
+  ivaCondition,
+  onCancel,
+  onClientAddressChange,
+  onClientCuitChange,
+  onClientNameChange,
+  onClientTaxIdChange,
+  onDestinationCountryCodeChange,
+  onEmit,
+  onInvoiceTypeChange,
+  onIvaConditionChange,
+  payment,
+}: {
+  clientAddress: string
+  clientCuit: string
+  clientName: string
+  clientTaxId: string
+  destinationCountryCode: string
+  error: string
+  invoiceType: "C" | "E"
+  isIssuing: boolean
+  ivaCondition: string
+  onCancel: () => void
+  onClientAddressChange: (value: string) => void
+  onClientCuitChange: (value: string) => void
+  onClientNameChange: (value: string) => void
+  onClientTaxIdChange: (value: string) => void
+  onDestinationCountryCodeChange: (value: string) => void
+  onEmit: () => void
+  onInvoiceTypeChange: (value: "C" | "E") => void
+  onIvaConditionChange: (value: string) => void
+  payment: IncomePayment
+}) {
+  return (
+    <div className="flex justify-start">
+      <div className="w-full max-w-[680px] rounded-lg border bg-card p-4 text-sm shadow-xs">
+        <div className="flex items-start gap-3">
+          <ReceiptTextIcon className="mt-0.5 size-4 text-emerald-500" />
+          <div className="min-w-0 flex-1 space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="font-medium">Factura lista para emitir</p>
+              <Badge variant="secondary">Factura {invoiceType}</Badge>
+              <Badge variant="outline">ARCA real</Badge>
+            </div>
+            <div className="space-y-2">
+              <Label>Tipo de comprobante</Label>
+              <Select
+                onValueChange={(value) =>
+                  onInvoiceTypeChange(value as "C" | "E")
+                }
+                value={invoiceType}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="C">Factura C - mercado interno</SelectItem>
+                  <SelectItem value="E">Factura E - exportacion</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-lg border p-3">
+                <span className="text-muted-foreground">Cliente</span>
+                <div className="mt-1 font-medium">{payment.client}</div>
+              </div>
+              <div className="rounded-lg border p-3">
+                <span className="text-muted-foreground">Importe</span>
+                <div className="mt-1 font-medium tabular-nums">
+                  {formatARS(payment.amount)}
+                </div>
+              </div>
+              <div className="rounded-lg border p-3">
+                <span className="text-muted-foreground">Fecha cobro</span>
+                <div className="mt-1 font-medium">
+                  {formatPaymentDate(payment.date)}
+                </div>
+              </div>
+              <div className="rounded-lg border p-3">
+                <span className="text-muted-foreground">Concepto</span>
+                <div className="mt-1 truncate font-medium">
+                  {payment.description}
+                </div>
+              </div>
+            </div>
+            {invoiceType === "C" ? (
+              <div className="grid gap-3 md:grid-cols-[1fr_180px]">
+                <div className="space-y-2">
+                  <Label htmlFor="assistant-invoice-cuit">CUIT receptor</Label>
+                  <Input
+                    id="assistant-invoice-cuit"
+                    inputMode="numeric"
+                    onChange={(event) =>
+                      onClientCuitChange(event.target.value)
+                    }
+                    placeholder="Opcional para consumidor final"
+                    value={clientCuit}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Condicion IVA</Label>
+                  <Select
+                    disabled={!clientCuit}
+                    onValueChange={onIvaConditionChange}
+                    value={ivaCondition}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ivaConditionOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="assistant-export-name">Cliente exterior</Label>
+                  <Input
+                    id="assistant-export-name"
+                    onChange={(event) => onClientNameChange(event.target.value)}
+                    value={clientName}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="assistant-export-country">
+                    Codigo pais destino
+                  </Label>
+                  <Input
+                    id="assistant-export-country"
+                    inputMode="numeric"
+                    onChange={(event) =>
+                      onDestinationCountryCodeChange(event.target.value)
+                    }
+                    placeholder="Ej: 200"
+                    value={destinationCountryCode}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="assistant-export-address">
+                    Domicilio exterior
+                  </Label>
+                  <Input
+                    id="assistant-export-address"
+                    onChange={(event) =>
+                      onClientAddressChange(event.target.value)
+                    }
+                    placeholder="Ciudad, pais"
+                    value={clientAddress}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="assistant-export-tax-id">
+                    ID fiscal exterior
+                  </Label>
+                  <Input
+                    id="assistant-export-tax-id"
+                    onChange={(event) =>
+                      onClientTaxIdChange(event.target.value)
+                    }
+                    placeholder="Opcional si usas CUIT pais"
+                    value={clientTaxId}
+                  />
+                </div>
+              </div>
+            )}
+            {error ? (
+              <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive">
+                {error}
+              </p>
+            ) : null}
+            <div className="flex flex-wrap gap-2">
+              <Button disabled={isIssuing} onClick={onEmit} type="button">
+                <FilePlus2Icon />
+                {isIssuing ? "Emitiendo..." : "Emitir en ARCA"}
+              </Button>
+              <Button
+                disabled={isIssuing}
+                onClick={onCancel}
+                type="button"
+                variant="outline"
+              >
+                <XIcon />
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+type InvoiceCandidateResult =
+  | { status: "found"; payment: IncomePayment }
+  | { status: "empty" }
+  | { status: "ambiguous"; payments: IncomePayment[] }
+
+function shouldPrepareInvoice(prompt: string) {
+  const normalized = normalizeText(prompt)
+
+  return /(factura|factur|emit|comprobante)/.test(normalized)
+}
+
+function inferInvoiceType(prompt: string, payment: IncomePayment): "C" | "E" {
+  const normalized = normalizeText(
+    `${prompt} ${payment.client} ${payment.description}`
+  )
+
+  return /exterior|export|factura e|cliente afuera|usa|usd|dolar|dolares|internacional/.test(
+    normalized
+  )
+    ? "E"
+    : "C"
+}
+
+function findInvoiceCandidate(
+  prompt: string,
+  payments: IncomePayment[]
+): InvoiceCandidateResult {
+  const pendingPayments = payments.filter(
+    (payment) => payment.invoiceStatus === "pendiente"
+  )
+
+  if (pendingPayments.length === 0) {
+    return { status: "empty" }
+  }
+
+  if (pendingPayments.length === 1) {
+    return { status: "found", payment: pendingPayments[0] }
+  }
+
+  const normalizedPrompt = normalizeText(prompt)
+  const promptDigits = normalizedPrompt.replace(/\D/g, "")
+  const scoredPayments = pendingPayments
+    .map((payment) => ({
+      payment,
+      score: getPaymentMatchScore(payment, normalizedPrompt, promptDigits),
+    }))
+    .sort((a, b) => b.score - a.score)
+  const best = scoredPayments[0]
+  const second = scoredPayments[1]
+
+  if (best.score >= 3 && best.score > second.score) {
+    return { status: "found", payment: best.payment }
+  }
+
+  return {
+    status: "ambiguous",
+    payments: pendingPayments.slice(0, 5),
+  }
+}
+
+function getPaymentMatchScore(
+  payment: IncomePayment,
+  normalizedPrompt: string,
+  promptDigits: string
+) {
+  const normalizedClient = normalizeText(payment.client)
+  const normalizedDescription = normalizeText(payment.description)
+  const amountDigits = String(Math.round(payment.amount))
+  let score = 0
+
+  if (normalizedPrompt.includes(normalizedClient)) {
+    score += 6
+  }
+
+  if (normalizedPrompt.includes(normalizedDescription)) {
+    score += 4
+  }
+
+  if (promptDigits.includes(amountDigits)) {
+    score += 5
+  }
+
+  for (const token of `${normalizedClient} ${normalizedDescription}`.split(/\s+/)) {
+    if (token.length > 2 && normalizedPrompt.includes(token)) {
+      score += 1
+    }
+  }
+
+  return score
+}
+
+function buildInvoiceCandidateMessage(candidate: InvoiceCandidateResult) {
+  if (candidate.status === "found") {
+    return `Preparé la factura para ${candidate.payment.client}.`
+  }
+
+  if (candidate.status === "empty") {
+    return "No encontre cobros pendientes para facturar. Cargá un cobro pendiente o revisá si ya fue facturado."
+  }
+
+  return [
+    "Puedo hacerlo, pero necesito saber cuál cobro querés facturar.",
+    "Pendientes detectados:",
+    ...candidate.payments.map(
+      (payment) =>
+        `- ${payment.client}: ${formatARS(payment.amount)} (${payment.description})`
+    ),
+    "Decime, por ejemplo: **facturá el cobro de Cuatro Cafe**.",
+  ].join("\n")
+}
+
+function shouldUseArcaContext(prompt: string) {
+  const normalized = normalizeText(prompt)
+
+  const mentionsFiscalData =
+    /arca|afip|factur|comprobante|cae|punto de venta|histor/.test(normalized)
+  const asksForRealData =
+    /cuanto|total|monto|importe|emitid|trae|consulta|histor|hasta ahora|este ano|este año/.test(
+      normalized
+    )
+
+  return mentionsFiscalData && asksForRealData
+}
+
+function normalizeText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+}
