@@ -8,13 +8,14 @@ import { cn } from "@/lib/utils"
 type SiteHeaderProps = {
   title: string
   description: string
-  dataStatus: "loading" | "connected" | "local" | "error"
+  dataStatus: "loading" | "connected" | "local" | "demo" | "error"
 }
 
 const dataStatusLabel = {
   loading: "Conectando",
   connected: "Supabase",
   local: "Local",
+  demo: "Demo",
   error: "Sin sync",
 } satisfies Record<SiteHeaderProps["dataStatus"], string>
 
@@ -52,6 +53,8 @@ export function SiteHeader({
             "gap-1",
             dataStatus === "connected" &&
               "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300",
+            dataStatus === "demo" &&
+              "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900 dark:bg-sky-950 dark:text-sky-300",
             dataStatus === "error" &&
               "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300"
           )}

@@ -52,7 +52,7 @@ import type {
   UserFiscalProfile,
 } from "@/types/accounting"
 
-type DataStatus = "loading" | "connected" | "local" | "error"
+type DataStatus = "loading" | "connected" | "local" | "demo" | "error"
 type AuthStatus = "loading" | "authenticated" | "anonymous"
 type InvoiceEmissionOptions = {
   invoiceType?: InvoiceKind
@@ -63,6 +63,8 @@ type InvoiceEmissionOptions = {
   destinationCountryCode?: number
   receiverIvaConditionId?: number
 }
+
+const DEMO_AUTH_STORAGE_KEY = "contable-demo-session"
 
 const sectionMeta: Record<AppSection, { title: string; description: string }> =
   {
@@ -113,21 +115,38 @@ export default function App() {
   const [taxDueActionMonthKey, setTaxDueActionMonthKey] = React.useState<
     string | null
   >(null)
+  const [isDemoSession, setIsDemoSession] =
+    React.useState(getStoredDemoSession)
   const [session, setSession] = React.useState<Session | null>(null)
-  const [authStatus, setAuthStatus] = React.useState<AuthStatus>(
-    isSupabaseConfigured ? "loading" : "authenticated"
+  const [authStatus, setAuthStatus] = React.useState<AuthStatus>(() =>
+    getStoredDemoSession()
+      ? "authenticated"
+      : isSupabaseConfigured
+        ? "loading"
+        : "anonymous"
   )
-  const [dataStatus, setDataStatus] = React.useState<DataStatus>(
-    isSupabaseConfigured ? "loading" : "local"
-  )
+  const [dataStatus, setDataStatus] = React.useState<DataStatus>("loading")
   const activeMeta = sectionMeta[activeSection]
+  const isDemoActive = isDemoSession && authStatus === "authenticated"
+  const shouldUseSupabase =
+    isSupabaseConfigured && Boolean(session) && !isDemoActive
 
   React.useEffect(() => {
+    if (isDemoSession) {
+      setSession(null)
+      setAuthStatus("authenticated")
+      return
+    }
+
     if (!supabase) {
+      setSession(null)
+      setAuthStatus("anonymous")
       return
     }
 
     let mounted = true
+
+    setAuthStatus("loading")
 
     supabase.auth.getSession().then(({ data }) => {
       if (!mounted) {
@@ -149,18 +168,28 @@ export default function App() {
       mounted = false
       subscription.unsubscribe()
     }
-  }, [])
+  }, [isDemoSession])
 
   React.useEffect(() => {
     let cancelled = false
 
     async function loadSupabaseData() {
+      if (isDemoActive) {
+        setPayments(initialPayments)
+        setInvoices([])
+        setAssistantMessages(initialAssistantMessages)
+        setFiscalProfile(emptyFiscalProfile)
+        setTaxPayments([])
+        setDataStatus("demo")
+        return
+      }
+
       if (!isSupabaseConfigured) {
         setDataStatus("local")
         return
       }
 
-      if (!session) {
+      if (!session || !shouldUseSupabase) {
         setPayments([])
         setInvoices([])
         setAssistantMessages([])
@@ -214,10 +243,17 @@ export default function App() {
     return () => {
       cancelled = true
     }
-  }, [session])
+  }, [isDemoActive, session, shouldUseSupabase])
 
   async function handleSignOut() {
-    await signOut()
+    if (shouldUseSupabase) {
+      await signOut()
+    }
+
+    setStoredDemoSession(false)
+    setIsDemoSession(false)
+    setSession(null)
+    setAuthStatus("anonymous")
     setPayments([])
     setInvoices([])
     setAssistantMessages([])
@@ -226,8 +262,22 @@ export default function App() {
     setActiveSection("resumen")
   }
 
+  function startDemoSession() {
+    setStoredDemoSession(true)
+    setIsDemoSession(true)
+    setSession(null)
+    setAuthStatus("authenticated")
+    setDataStatus("demo")
+    setPayments(initialPayments)
+    setInvoices([])
+    setAssistantMessages(initialAssistantMessages)
+    setFiscalProfile(emptyFiscalProfile)
+    setTaxPayments([])
+    setActiveSection("resumen")
+  }
+
   async function addPayment(payment: Omit<IncomePayment, "id">) {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase) {
       try {
         const savedPayment = await createPayment(payment)
 
@@ -244,7 +294,7 @@ export default function App() {
   }
 
   async function editPayment(payment: IncomePayment) {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase) {
       try {
         const savedPayment = await updatePayment(payment)
 
@@ -268,7 +318,7 @@ export default function App() {
   }
 
   async function removePayment(paymentId: string) {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase) {
       try {
         await deletePayment(paymentId)
         setPayments((current) =>
@@ -289,7 +339,7 @@ export default function App() {
   async function addAssistantMessage(
     message: Pick<AssistantMessage, "content" | "role">
   ) {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase) {
       try {
         const savedMessage = await createAssistantMessage(message)
 
@@ -309,7 +359,7 @@ export default function App() {
   }
 
   async function clearChat() {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase) {
       try {
         await clearAssistantMessages()
         setDataStatus("connected")
@@ -323,7 +373,7 @@ export default function App() {
   }
 
   async function saveFiscalProfile(profile: UserFiscalProfile) {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase) {
       try {
         const savedProfile = await upsertFiscalProfile(profile)
 
@@ -347,7 +397,7 @@ export default function App() {
 
     setTaxDueActionMonthKey(due.monthKey)
     try {
-      if (isSupabaseConfigured) {
+      if (shouldUseSupabase) {
         const savedTaxPayment = await markTaxPaymentAsPaid({
           amount: due.amount,
           monthKey: due.monthKey,
@@ -381,7 +431,7 @@ export default function App() {
   async function unmarkTaxDuePaid(due: TaxDue) {
     setTaxDueActionMonthKey(due.monthKey)
     try {
-      if (isSupabaseConfigured) {
+      if (shouldUseSupabase) {
         await unmarkTaxPaymentAsPaid(due.monthKey)
         setDataStatus("connected")
       }
@@ -404,6 +454,36 @@ export default function App() {
   ) {
     let issuedInvoice: Omit<GeneratedInvoice, "id">
     const invoiceKind = options.invoiceType ?? "C"
+
+    if (isDemoActive) {
+      const issuedInvoice: GeneratedInvoice = {
+        amount: payment.amount,
+        cae: "DEMO",
+        caeExpiresAt: getTodayInputValue(),
+        client: options.clientName ?? payment.client,
+        description: payment.description,
+        id: crypto.randomUUID(),
+        invoiceType: invoiceKind === "E" ? "Factura E" : "Factura C",
+        issueDate: getTodayInputValue(),
+        number: `DEMO-${String(invoices.length + 1).padStart(4, "0")}`,
+        paymentId: payment.id,
+        pointOfSale: 0,
+        status: "issued",
+      }
+
+      setInvoices((current) => [issuedInvoice, ...current])
+      setPayments((current) =>
+        current.map((item) =>
+          item.id === payment.id
+            ? {
+                ...item,
+                invoiceStatus: "facturado",
+              }
+            : item
+        )
+      )
+      return
+    }
 
     try {
       const arcaInvoice = await emitArcaInvoice({
@@ -441,7 +521,7 @@ export default function App() {
       throw error
     }
 
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase) {
       try {
         const savedInvoice = await createInvoice(issuedInvoice)
         const updatedPayment = await markPaymentAsInvoiced(payment.id)
@@ -554,11 +634,18 @@ export default function App() {
     )
   }
 
-  if (isSupabaseConfigured && authStatus === "anonymous") {
-    return <AuthScreen />
+  if (authStatus === "anonymous") {
+    return (
+      <AuthScreen
+        canUseEmailAuth={isSupabaseConfigured}
+        onUseDemo={startDemoSession}
+      />
+    )
   }
 
-  const userEmail = session?.user.email ?? "local@contable.app"
+  const userEmail = isDemoActive
+    ? "demo@contable.app"
+    : (session?.user.email ?? "local@contable.app")
   const sidebarUser = {
     name: userEmail.split("@")[0] || "Usuario",
     email: userEmail,
@@ -639,4 +726,25 @@ function upsertLocalTaxPayment(
   return taxPayments.map((payment) =>
     payment.monthKey === nextTaxPayment.monthKey ? nextTaxPayment : payment
   )
+}
+
+function getStoredDemoSession() {
+  if (typeof window === "undefined") {
+    return false
+  }
+
+  return window.localStorage.getItem(DEMO_AUTH_STORAGE_KEY) === "true"
+}
+
+function setStoredDemoSession(enabled: boolean) {
+  if (typeof window === "undefined") {
+    return
+  }
+
+  if (enabled) {
+    window.localStorage.setItem(DEMO_AUTH_STORAGE_KEY, "true")
+    return
+  }
+
+  window.localStorage.removeItem(DEMO_AUTH_STORAGE_KEY)
 }

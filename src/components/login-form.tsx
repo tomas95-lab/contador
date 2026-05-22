@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Loader2Icon, ReceiptTextIcon } from "lucide-react"
+import { Loader2Icon, PlayCircleIcon, ReceiptTextIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -25,9 +25,14 @@ import { cn } from "@/lib/utils"
 type AuthMode = "login" | "signup"
 
 export function LoginForm({
+  canUseEmailAuth,
   className,
+  onUseDemo,
   ...props
-}: React.ComponentProps<"div">) {
+}: React.ComponentProps<"div"> & {
+  canUseEmailAuth: boolean
+  onUseDemo: () => void
+}) {
   const [email, setEmail] = React.useState("")
   const [error, setError] = React.useState("")
   const [message, setMessage] = React.useState("")
@@ -39,6 +44,12 @@ export function LoginForm({
     event.preventDefault()
     setError("")
     setMessage("")
+
+    if (!canUseEmailAuth) {
+      setError("El acceso con email no esta configurado en este entorno.")
+      return
+    }
+
     setIsPending(true)
 
     try {
@@ -136,6 +147,26 @@ export function LoginForm({
               </Field>
             </FieldGroup>
           </form>
+          <div className="mt-6 space-y-3">
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span className="h-px flex-1 bg-border" />
+              <span>o</span>
+              <span className="h-px flex-1 bg-border" />
+            </div>
+            <Button
+              className="w-full"
+              disabled={isPending}
+              onClick={onUseDemo}
+              type="button"
+              variant="outline"
+            >
+              <PlayCircleIcon />
+              Entrar con demo
+            </Button>
+            <p className="text-center text-xs text-muted-foreground">
+              Usa datos de ejemplo sin crear cuenta.
+            </p>
+          </div>
         </CardContent>
       </Card>
     </div>
