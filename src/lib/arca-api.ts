@@ -1,3 +1,10 @@
+import {
+  getPaymentsInFiscalPeriod,
+  sumPayments,
+  type FinancialMetrics,
+} from "@/lib/accounting"
+import type { IncomePayment } from "@/types/accounting"
+
 export type ArcaAnnualSummary = {
   year: number
   total: number
@@ -95,6 +102,55 @@ export type EmittedArcaInvoice = {
   }
 }
 
+export type ArcaAssistantContext = {
+  kind: "arca-assistant-context"
+  generatedAt: string
+  accessMode: "read-only"
+  evaluationPeriod: FinancialMetrics["evaluationPeriod"]
+  appRecords: {
+    paymentsInEvaluationPeriod: {
+      count: number
+      total: number
+      records: {
+        date: string
+        amount: number
+        client: string
+        description: string
+        invoiceStatus: string
+        source: string | null
+        invoiceType: string | null
+        pointOfSale: number | null
+        cae: string | null
+        receiverCuit: string | null
+      }[]
+    }
+    arcaHistoricalPayments: {
+      count: number
+      total: number
+      records: {
+        date: string
+        amount: number
+        client: string
+        invoiceType: string | null
+        pointOfSale: number | null
+        cae: string | null
+        receiverCuit: string | null
+      }[]
+    }
+  }
+  liveApi: {
+    attempted: true
+    historical: ArcaHistoricalInvoices | null
+    annualSummaries: {
+      year: number
+      summary: ArcaAnnualSummary | null
+      error: string | null
+    }[]
+    errors: string[]
+  }
+  notes: string[]
+}
+
 const arcaApiUrl =
   (import.meta.env.VITE_ARCA_API_URL as string | undefined) ??
   "http://localhost:3001"
@@ -136,8 +192,8 @@ export async function emitArcaInvoice(payload: ArcaInvoiceEmissionPayload) {
 }
 
 export async function fetchArcaHistoricalInvoices({
-  wsfe = [2, 4],
-  wsfex = [1, 3],
+  wsfe = parsePointList(import.meta.env.VITE_ARCA_WSFE_POINTS, [4]),
+  wsfex = parsePointList(import.meta.env.VITE_ARCA_WSFEX_POINTS, [3]),
 }: {
   wsfe?: number[]
   wsfex?: number[]
@@ -159,6 +215,84 @@ export async function fetchArcaHistoricalInvoices({
   return (await response.json()) as ArcaHistoricalInvoices
 }
 
+export async function fetchArcaAssistantContext({
+  metrics,
+  payments,
+}: {
+  metrics: FinancialMetrics
+  payments: IncomePayment[]
+}): Promise<ArcaAssistantContext> {
+  const years = getYearsInRange(
+    metrics.evaluationPeriod.startDate,
+    metrics.evaluationPeriod.endDate
+  )
+  const periodPayments = getPaymentsInFiscalPeriod(
+    payments,
+    metrics.evaluationPeriod
+  )
+  const arcaHistoricalPayments = periodPayments.filter(
+    (payment) => payment.source === "arca_historical" || Boolean(payment.cae)
+  )
+  const [historicalResult, annualResults] = await Promise.all([
+    settle(fetchArcaHistoricalInvoices()),
+    Promise.all(
+      years.map(async (year) => ({
+        year,
+        result: await settle(fetchArcaAnnualSummary(year)),
+      }))
+    ),
+  ])
+  const annualSummaries = annualResults.map(({ result, year }) => ({
+    year,
+    summary: result.status === "fulfilled" ? result.value : null,
+    error: result.status === "rejected" ? errorMessage(result.reason) : null,
+  }))
+  const liveErrors = [
+    historicalResult.status === "rejected"
+      ? errorMessage(historicalResult.reason)
+      : null,
+    ...annualSummaries.map((summary) => summary.error),
+  ].filter((error): error is string => Boolean(error))
+
+  return {
+    kind: "arca-assistant-context",
+    generatedAt: new Date().toISOString(),
+    accessMode: "read-only",
+    evaluationPeriod: metrics.evaluationPeriod,
+    appRecords: {
+      paymentsInEvaluationPeriod: {
+        count: periodPayments.length,
+        total: sumPayments(periodPayments),
+        records: periodPayments.map(serializePaymentForArcaContext),
+      },
+      arcaHistoricalPayments: {
+        count: arcaHistoricalPayments.length,
+        total: sumPayments(arcaHistoricalPayments),
+        records: arcaHistoricalPayments.map((payment) => ({
+          date: payment.date,
+          amount: payment.amount,
+          client: payment.client,
+          invoiceType: payment.invoiceType ?? null,
+          pointOfSale: payment.pointOfSale ?? null,
+          cae: payment.cae ?? null,
+          receiverCuit: payment.receiverCuit ?? null,
+        })),
+      },
+    },
+    liveApi: {
+      attempted: true,
+      historical:
+        historicalResult.status === "fulfilled" ? historicalResult.value : null,
+      annualSummaries,
+      errors: liveErrors,
+    },
+    notes: [
+      "El acceso ARCA es de solo lectura para el asistente.",
+      "Los web services ARCA solo devuelven comprobantes de los puntos de venta activos para esos servicios; el historico importado desde Mis Comprobantes se incluye desde Supabase cuando esta cargado.",
+    ],
+  }
+}
+
 async function parseArcaError(response: Response) {
   const details = (await response.json().catch(() => null)) as {
     error?: string
@@ -170,4 +304,62 @@ async function parseArcaError(response: Response) {
     details?.errors?.find((error) => Boolean(error.message))?.message ??
     response.statusText
   )
+}
+
+function parsePointList(value: string | undefined, fallback: number[]) {
+  if (!value) {
+    return fallback
+  }
+
+  const points = value
+    .split(",")
+    .map((item) => Number(item.trim()))
+    .filter((item) => Number.isInteger(item) && item > 0)
+
+  return points.length > 0 ? points : fallback
+}
+
+function getYearsInRange(startDate: string, endDate: string) {
+  const startYear = Number(startDate.slice(0, 4))
+  const endYear = Number(endDate.slice(0, 4))
+
+  return Array.from(
+    { length: Math.max(0, endYear - startYear + 1) },
+    (_, index) => startYear + index
+  )
+}
+
+function serializePaymentForArcaContext(payment: IncomePayment) {
+  return {
+    date: payment.date,
+    amount: payment.amount,
+    client: payment.client,
+    description: payment.description,
+    invoiceStatus: payment.invoiceStatus,
+    source: payment.source ?? null,
+    invoiceType: payment.invoiceType ?? null,
+    pointOfSale: payment.pointOfSale ?? null,
+    cae: payment.cae ?? null,
+    receiverCuit: payment.receiverCuit ?? null,
+  }
+}
+
+async function settle<T>(
+  promise: Promise<T>
+): Promise<PromiseSettledResult<T>> {
+  try {
+    return {
+      status: "fulfilled",
+      value: await promise,
+    }
+  } catch (reason) {
+    return {
+      status: "rejected",
+      reason,
+    }
+  }
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Error desconocido"
 }

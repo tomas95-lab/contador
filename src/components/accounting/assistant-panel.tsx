@@ -32,7 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { fetchArcaHistoricalInvoices } from "@/lib/arca-api"
+import { fetchArcaAssistantContext } from "@/lib/arca-api"
 import { requestAssistantReply } from "@/lib/ai-assistant"
 import {
   formatARS,
@@ -135,7 +135,10 @@ export function AssistantPanel({
         const candidate = findInvoiceCandidate(prompt, payments)
 
         if (candidate.status === "found") {
-          const suggestedInvoiceType = inferInvoiceType(prompt, candidate.payment)
+          const suggestedInvoiceType = inferInvoiceType(
+            prompt,
+            candidate.payment
+          )
 
           setPendingInvoiceDraft({
             id: crypto.randomUUID(),
@@ -173,11 +176,11 @@ export function AssistantPanel({
       if (shouldUseArcaContext(prompt)) {
         setIsQueryingArca(true)
         try {
-          arcaContext = await fetchArcaHistoricalInvoices()
+          arcaContext = await fetchArcaAssistantContext({ metrics, payments })
           assistantPrompt = [
-            "La app consulto ARCA automaticamente en modo solo lectura.",
+            "La app consulto la API de ARCA automaticamente en modo solo lectura y adjunto el contexto autorizado.",
             `Pregunta original: ${prompt}`,
-            "Responde usando los datos fiscales reales disponibles y aclara cualquier brecha si falta informacion.",
+            "Responde usando los datos fiscales reales disponibles. Si ARCA no devuelve historico para algun punto de venta, usa tambien los registros importados en la app y aclara la brecha.",
           ].join("\n")
         } catch (error) {
           await onAddMessage({
@@ -230,8 +233,9 @@ export function AssistantPanel({
     }
 
     const latestPayment =
-      payments.find((payment) => payment.id === pendingInvoiceDraft.payment.id) ??
-      pendingInvoiceDraft.payment
+      payments.find(
+        (payment) => payment.id === pendingInvoiceDraft.payment.id
+      ) ?? pendingInvoiceDraft.payment
     const invoiceType = pendingInvoiceDraft.invoiceType
 
     if (latestPayment.invoiceStatus !== "pendiente") {
@@ -323,14 +327,14 @@ export function AssistantPanel({
   }
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[360px_1fr]">
+    <div className="grid min-h-0 items-start gap-4 xl:grid-cols-[360px_1fr]">
       <FiscalProfileCard onSave={onSaveProfile} profile={profile} />
-      <Card className="flex min-h-[680px] w-full rounded-lg shadow-none">
-        <CardHeader className="border-b">
+      <Card className="h-[calc(100svh-9rem)] min-h-[520px] w-full rounded-lg shadow-none">
+        <CardHeader className="shrink-0 border-b">
           <div className="flex items-center justify-between gap-3">
             <CardTitle className="flex items-center gap-2">
               <SparklesIcon className="size-4 text-emerald-500" />
-              Asistente IA
+              Conta
             </CardTitle>
             <Button
               disabled={messages.length === 0 || isClearing}
@@ -344,7 +348,7 @@ export function AssistantPanel({
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="flex-1 overflow-y-auto p-4">
+        <CardContent className="min-h-0 flex-1 overflow-y-auto p-4">
           <div className="space-y-4">
             {messages.map((message) => (
               <div
@@ -432,7 +436,7 @@ export function AssistantPanel({
             ) : null}
           </div>
         </CardContent>
-        <CardFooter className="border-t bg-background p-4">
+        <CardFooter className="shrink-0 border-t bg-background p-4">
           <form className="flex w-full gap-2" onSubmit={handleSubmit}>
             <Textarea
               className="min-h-10 flex-1"
@@ -562,9 +566,7 @@ function PreparedInvoiceCard({
                   <Input
                     id="assistant-invoice-cuit"
                     inputMode="numeric"
-                    onChange={(event) =>
-                      onClientCuitChange(event.target.value)
-                    }
+                    onChange={(event) => onClientCuitChange(event.target.value)}
                     placeholder="Opcional para consumidor final"
                     value={clientCuit}
                   />
@@ -592,7 +594,9 @@ function PreparedInvoiceCard({
             ) : (
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="assistant-export-name">Cliente exterior</Label>
+                  <Label htmlFor="assistant-export-name">
+                    Cliente exterior
+                  </Label>
                   <Input
                     id="assistant-export-name"
                     onChange={(event) => onClientNameChange(event.target.value)}
@@ -750,7 +754,9 @@ function getPaymentMatchScore(
     score += 5
   }
 
-  for (const token of `${normalizedClient} ${normalizedDescription}`.split(/\s+/)) {
+  for (const token of `${normalizedClient} ${normalizedDescription}`.split(
+    /\s+/
+  )) {
     if (token.length > 2 && normalizedPrompt.includes(token)) {
       score += 1
     }
@@ -783,9 +789,11 @@ function shouldUseArcaContext(prompt: string) {
   const normalized = normalizeText(prompt)
 
   const mentionsFiscalData =
-    /arca|afip|factur|comprobante|cae|punto de venta|histor/.test(normalized)
+    /arca|afip|factur|comprobante|cae|punto de venta|histor|monotributo|recategoriz|categoria|limite|ingreso/.test(
+      normalized
+    )
   const asksForRealData =
-    /cuanto|total|monto|importe|emitid|trae|consulta|histor|hasta ahora|este ano|este año/.test(
+    /cuanto|total|monto|importe|emitid|trae|consulta|histor|hasta ahora|este ano|este año|periodo|desde|limite|pasando|riesgo/.test(
       normalized
     )
 

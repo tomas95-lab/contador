@@ -1,11 +1,27 @@
 type FinancialMetrics = {
   currentMonthRevenue: number
   previousMonthRevenue: number
+  evaluationPeriod?: {
+    startDate: string
+    endDate: string
+    label: string
+    recategorizationLabel: string
+    filingStartDate: string
+    filingEndDate: string
+    isFilingWindow: boolean
+    mode: "filing-window" | "preventive"
+    statusLabel: string
+    counterLabel: string
+  }
   annualTotal: number
   annualLimitRemaining: number
   annualUsage: number
   currentVsPrevious: number
   projectedAnnual: number
+  projectedLimitRemaining?: number
+  periodElapsedDays?: number
+  periodTotalDays?: number
+  periodElapsedRatio?: number
   monthlyTarget: number
 }
 
@@ -93,7 +109,7 @@ J: límite $89.872.640 | cuota total $999.008
 K: límite $108.357.084 | cuota total $1.381.688
 
 Vencimiento cuota mensual: día 20 de cada mes.
-Recategorización semestral: enero y julio.
+Recategorización semestral: enero/febrero y julio/agosto. La app envia evaluationPeriod con el intervalo exacto evaluado; no reemplaces ese periodo por año calendario.
 
 REGLAS DE COMPORTAMIENTO
 - Siempre usá los datos financieros del usuario que vengan en el contexto.
@@ -101,7 +117,9 @@ REGLAS DE COMPORTAMIENTO
 - Solo usá datos reales de ARCA cuando vengan en "Datos ARCA autorizados por el usuario".
 - Nunca afirmes que consultaste ARCA si no recibiste datos ARCA autorizados en el contexto.
 - Si el usuario pide consultar ARCA y no vienen datos ARCA autorizados, decí que necesitás su aprobación en la app antes de consultar.
+- Si "Datos ARCA autorizados" incluye kind="arca-assistant-context", tratá liveApi como consulta directa a la API ARCA y appRecords como registros importados/guardados por la app. Si liveApi tiene errores o no trae histórico de un punto de venta, aclaralo sin descartar appRecords.
 - Si hay datos de ingresos, categoría, límites, cobros pendientes o proyección anual, incorporalos explícitamente en la respuesta.
+- Cuando hables de limites de categoria, usa annualTotal, annualUsage y annualLimitRemaining como acumulado del evaluationPeriod recibido, no como año calendario.
 - Dalo siempre en términos accionables: qué mirar, qué hacer, cuánto margen queda, qué riesgo hay, cuál es el próximo paso.
 - Nunca des consejos vagos.
 - Si el usuario está usando más del 80% del límite de su categoría, advertílo proactivamente.

@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/card"
 import {
   formatARS,
+  formatFiscalPeriodRange,
   formatMonthName,
   getFinancialMetrics,
   getMonthKey,
@@ -57,7 +58,9 @@ export function MonthlyReportCard({
               Exportable para archivo propio o para compartir
             </CardDescription>
           </div>
-          <Badge variant="outline">{formatMonthName(metrics.currentMonthKey)}</Badge>
+          <Badge variant="outline">
+            {formatMonthName(metrics.currentMonthKey)}
+          </Badge>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -182,7 +185,10 @@ function buildMonthlyReportHtml({
     )
     .join("")
   const alertItems = alerts
-    .map((alert) => `<li><strong>${escapeHtml(alert.title)}:</strong> ${escapeHtml(alert.description)}</li>`)
+    .map(
+      (alert) =>
+        `<li><strong>${escapeHtml(alert.title)}:</strong> ${escapeHtml(alert.description)}</li>`
+    )
     .join("")
 
   return `<!doctype html>
@@ -206,10 +212,11 @@ function buildMonthlyReportHtml({
 <body>
   <h1>Resumen fiscal mensual</h1>
   <p class="muted">${escapeHtml(formatMonthName(metrics.currentMonthKey))} · Monotributo categoria ${escapeHtml(category.key)}</p>
+  <p class="muted">Periodo fiscal: ${escapeHtml(formatFiscalPeriodRange(metrics.evaluationPeriod))}</p>
   <div class="grid">
     <div class="metric"><span>Cobrado</span><strong>${formatARS(metrics.currentMonthRevenue)}</strong></div>
     <div class="metric"><span>Pendiente</span><strong>${formatARS(pendingTotal)}</strong></div>
-    <div class="metric"><span>Uso anual</span><strong>${Math.round(metrics.annualUsage * 100)}%</strong></div>
+    <div class="metric"><span>Uso periodo</span><strong>${Math.round(metrics.annualUsage * 100)}%</strong></div>
     <div class="metric"><span>Cuota</span><strong>${formatARS(category.monthlyTax)}</strong></div>
   </div>
   <section>

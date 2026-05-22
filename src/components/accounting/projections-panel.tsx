@@ -36,6 +36,7 @@ import {
 import { taxCategories } from "@/data/accounting"
 import {
   formatARS,
+  formatFiscalPeriodRange,
   formatPercent,
   getBillingScenario,
   getFinancialMetrics,
@@ -55,7 +56,7 @@ export function ProjectionsPanel({
   payments,
 }: ProjectionsPanelProps) {
   const metrics = getFinancialMetrics(payments, category)
-  const projectedDelta = metrics.projectedAnnual - category.annualLimit
+  const projectedDelta = -metrics.projectedLimitRemaining
   const nextCategory = taxCategories.find(
     (item) => item.annualLimit > category.annualLimit
   )
@@ -71,158 +72,164 @@ export function ProjectionsPanel({
         </div>
       ) : null}
       <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
-      <div className="flex flex-col gap-4">
-        <div className="grid gap-4 md:grid-cols-3">
-          <ProjectionCard
-            description="Proyeccion anual"
-            icon={<TrendingUpIcon className="size-4 text-amber-500" />}
-            title={formatARS(metrics.projectedAnnual)}
-          />
-          <ProjectionCard
-            description="Margen disponible"
-            icon={<MinusIcon className="size-4 text-emerald-500" />}
-            title={formatARS(metrics.annualLimitRemaining)}
-          />
-          <ProjectionCard
-            description="Desvio proyectado"
-            icon={<ArrowUpRightIcon className="size-4 text-amber-500" />}
-            title={formatARS(projectedDelta)}
-          />
-        </div>
-        <Card className="rounded-lg shadow-none">
-          <CardHeader>
-            <CardTitle>Escenarios por categoria</CardTitle>
-            <CardDescription>Comparacion con el acumulado actual</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-hidden rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Categoria</TableHead>
-                    <TableHead>Limite anual</TableHead>
-                    <TableHead>Uso</TableHead>
-                    <TableHead className="text-right">Disponible</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {taxCategories.map((item) => {
-                    const usage = metrics.annualTotal / item.annualLimit
-                    const isCurrent = item.key === category.key
+        <div className="flex flex-col gap-4">
+          <div className="grid gap-4 md:grid-cols-3">
+            <ProjectionCard
+              description="Proyeccion del periodo"
+              icon={<TrendingUpIcon className="size-4 text-amber-500" />}
+              title={formatARS(metrics.projectedAnnual)}
+            />
+            <ProjectionCard
+              description="Margen disponible"
+              icon={<MinusIcon className="size-4 text-emerald-500" />}
+              title={formatARS(metrics.annualLimitRemaining)}
+            />
+            <ProjectionCard
+              description="Desvio proyectado"
+              icon={<ArrowUpRightIcon className="size-4 text-amber-500" />}
+              title={formatARS(projectedDelta)}
+            />
+          </div>
+          <Card className="rounded-lg shadow-none">
+            <CardHeader>
+              <CardTitle>Escenarios por categoria</CardTitle>
+              <CardDescription>
+                {formatFiscalPeriodRange(metrics.evaluationPeriod)}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-hidden rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Categoria</TableHead>
+                      <TableHead>Limite anual</TableHead>
+                      <TableHead>Uso</TableHead>
+                      <TableHead className="text-right">Disponible</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {taxCategories.map((item) => {
+                      const usage = metrics.annualTotal / item.annualLimit
+                      const isCurrent = item.key === category.key
 
-                    return (
-                      <TableRow
-                        key={item.key}
-                        data-state={isCurrent ? "selected" : undefined}
-                      >
-                        <TableCell className="font-medium">
-                          <div className="flex items-center gap-2">
-                            {item.key}
-                            {isCurrent && (
-                              <Badge variant="secondary">Actual</Badge>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="tabular-nums">
-                          {formatARS(item.annualLimit)}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            <div className="h-2 w-24 rounded-full bg-muted">
-                              <div
-                                className={cn(
-                                  "h-full rounded-full bg-emerald-500",
-                                  usage >= item.warningAt && "bg-amber-500",
-                                  usage >= 1 && "bg-destructive"
-                                )}
-                                style={{
-                                  width: `${Math.min(usage * 100, 100)}%`,
-                                }}
-                              />
+                      return (
+                        <TableRow
+                          key={item.key}
+                          data-state={isCurrent ? "selected" : undefined}
+                        >
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                              {item.key}
+                              {isCurrent && (
+                                <Badge variant="secondary">Actual</Badge>
+                              )}
                             </div>
-                            <span className="text-muted-foreground tabular-nums">
-                              {formatPercent(usage)}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {formatARS(item.annualLimit - metrics.annualTotal)}
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-      <div className="flex flex-col gap-4">
-        <Card className="rounded-lg shadow-none">
-          <CardHeader>
-            <CardTitle>Lectura rapida</CardTitle>
-            <CardDescription>Categoria {category.key}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Uso actual</span>
-                <span className="font-medium tabular-nums">
-                  {formatPercent(metrics.annualUsage)}
-                </span>
+                          </TableCell>
+                          <TableCell className="tabular-nums">
+                            {formatARS(item.annualLimit)}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-3">
+                              <div className="h-2 w-24 rounded-full bg-muted">
+                                <div
+                                  className={cn(
+                                    "h-full rounded-full bg-emerald-500",
+                                    usage >= item.warningAt && "bg-amber-500",
+                                    usage >= 1 && "bg-destructive"
+                                  )}
+                                  style={{
+                                    width: `${Math.min(usage * 100, 100)}%`,
+                                  }}
+                                />
+                              </div>
+                              <span className="text-muted-foreground tabular-nums">
+                                {formatPercent(usage)}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {formatARS(item.annualLimit - metrics.annualTotal)}
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
               </div>
-              <div className="h-2 rounded-full bg-muted">
-                <div
-                  className={cn(
-                    "h-full rounded-full bg-emerald-500",
-                    metrics.annualUsage >= category.warningAt && "bg-amber-500",
-                    metrics.annualUsage >= 1 && "bg-destructive"
-                  )}
-                  style={{
-                    width: `${Math.min(metrics.annualUsage * 100, 100)}%`,
-                  }}
-                />
+            </CardContent>
+          </Card>
+        </div>
+        <div className="flex flex-col gap-4">
+          <Card className="rounded-lg shadow-none">
+            <CardHeader>
+              <CardTitle>Lectura rapida</CardTitle>
+              <CardDescription>
+                Categoria {category.key} ·{" "}
+                {metrics.evaluationPeriod.recategorizationLabel}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Uso actual</span>
+                  <span className="font-medium tabular-nums">
+                    {formatPercent(metrics.annualUsage)}
+                  </span>
+                </div>
+                <div className="h-2 rounded-full bg-muted">
+                  <div
+                    className={cn(
+                      "h-full rounded-full bg-emerald-500",
+                      metrics.annualUsage >= category.warningAt &&
+                        "bg-amber-500",
+                      metrics.annualUsage >= 1 && "bg-destructive"
+                    )}
+                    style={{
+                      width: `${Math.min(metrics.annualUsage * 100, 100)}%`,
+                    }}
+                  />
+                </div>
               </div>
-            </div>
-            <div className="rounded-lg border p-3">
-              <div className="text-sm text-muted-foreground">
-                Objetivo mensual
-              </div>
-              <div className="mt-1 text-xl font-semibold tabular-nums">
-                {formatARS(metrics.monthlyTarget)}
-              </div>
-            </div>
-            {nextCategory && (
               <div className="rounded-lg border p-3">
                 <div className="text-sm text-muted-foreground">
-                  Siguiente categoria
+                  Objetivo mensual
                 </div>
-                <div className="mt-1 flex items-center justify-between">
-                  <span className="text-xl font-semibold">
-                    {nextCategory.key}
-                  </span>
-                  <span className="text-sm tabular-nums text-muted-foreground">
-                    {formatARS(nextCategory.annualLimit)}
-                  </span>
+                <div className="mt-1 text-xl font-semibold tabular-nums">
+                  {formatARS(metrics.monthlyTarget)}
                 </div>
               </div>
-            )}
-            <Badge
-              variant="outline"
-              className={
-                projectedDelta > 0
-                  ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300"
-                  : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300"
-              }
-            >
-              {projectedDelta > 0
-                ? "Proyeccion sobre limite"
-                : "Dentro del limite"}
-            </Badge>
-          </CardContent>
-        </Card>
-        <ScenarioSimulator category={category} payments={payments} />
-      </div>
+              {nextCategory && (
+                <div className="rounded-lg border p-3">
+                  <div className="text-sm text-muted-foreground">
+                    Siguiente categoria
+                  </div>
+                  <div className="mt-1 flex items-center justify-between">
+                    <span className="text-xl font-semibold">
+                      {nextCategory.key}
+                    </span>
+                    <span className="text-sm text-muted-foreground tabular-nums">
+                      {formatARS(nextCategory.annualLimit)}
+                    </span>
+                  </div>
+                </div>
+              )}
+              <Badge
+                variant="outline"
+                className={
+                  projectedDelta > 0
+                    ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300"
+                    : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300"
+                }
+              >
+                {projectedDelta > 0
+                  ? "Proyeccion sobre limite"
+                  : "Dentro del limite"}
+              </Badge>
+            </CardContent>
+          </Card>
+          <ScenarioSimulator category={category} payments={payments} />
+        </div>
       </div>
     </div>
   )
@@ -271,7 +278,9 @@ function ScenarioSimulator({
     <Card className="rounded-lg shadow-none">
       <CardHeader>
         <CardTitle>Simulador</CardTitle>
-        <CardDescription>Que pasa si facturo X mas</CardDescription>
+        <CardDescription>
+          Que pasa si facturo X mas en el periodo
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 gap-3">

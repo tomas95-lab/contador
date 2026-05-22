@@ -32,7 +32,10 @@ import {
   fetchInvoices,
   fetchPayments,
   fetchTaxCategory,
+  fetchTaxPayments,
   markPaymentAsInvoiced,
+  markTaxPaymentAsPaid,
+  unmarkTaxPaymentAsPaid,
   updatePayment,
   upsertFiscalProfile,
 } from "@/lib/supabase-accounting"
@@ -44,6 +47,8 @@ import type {
   IncomePayment,
   InvoiceKind,
   TaxCategory,
+  TaxDue,
+  TaxPayment,
   UserFiscalProfile,
 } from "@/types/accounting"
 
@@ -63,14 +68,14 @@ const sectionMeta: Record<AppSection, { title: string; description: string }> =
   {
     resumen: {
       title: "Resumen",
-      description: "Vista mensual y categoria fiscal",
+      description: "Vista mensual y periodo fiscal",
     },
     cobros: {
       title: "Cobros",
       description: "Registro de ingresos y facturacion pendiente",
     },
     asistente: {
-      title: "Asistente IA",
+      title: "Conta",
       description: "Consultas sobre ingresos, limites y proyecciones",
     },
     facturacion: {
@@ -79,7 +84,7 @@ const sectionMeta: Record<AppSection, { title: string; description: string }> =
     },
     proyecciones: {
       title: "Proyecciones",
-      description: "Escenarios de categoria y limite anual",
+      description: "Escenarios de categoria y periodo fiscal",
     },
     clientes: {
       title: "Clientes",
@@ -104,6 +109,10 @@ export default function App() {
     React.useState<UserFiscalProfile>(emptyFiscalProfile)
   const [category, setCategory] =
     React.useState<TaxCategory>(currentTaxCategory)
+  const [taxPayments, setTaxPayments] = React.useState<TaxPayment[]>([])
+  const [taxDueActionMonthKey, setTaxDueActionMonthKey] = React.useState<
+    string | null
+  >(null)
   const [session, setSession] = React.useState<Session | null>(null)
   const [authStatus, setAuthStatus] = React.useState<AuthStatus>(
     isSupabaseConfigured ? "loading" : "authenticated"
@@ -156,6 +165,7 @@ export default function App() {
         setInvoices([])
         setAssistantMessages([])
         setFiscalProfile(emptyFiscalProfile)
+        setTaxPayments([])
         setDataStatus("loading")
         return
       }
@@ -167,12 +177,14 @@ export default function App() {
           remoteCategory,
           remoteMessages,
           remoteFiscalProfile,
+          remoteTaxPayments,
         ] = await Promise.all([
           fetchPayments(),
           fetchInvoices(),
           fetchTaxCategory(),
           fetchAssistantMessages(),
           fetchFiscalProfile(),
+          fetchTaxPayments(),
         ])
 
         if (cancelled) {
@@ -183,6 +195,7 @@ export default function App() {
         setInvoices(remoteInvoices)
         setCategory(remoteCategory)
         setFiscalProfile(remoteFiscalProfile)
+        setTaxPayments(remoteTaxPayments)
         setAssistantMessages(
           remoteMessages.length > 0 ? remoteMessages : initialAssistantMessages
         )
@@ -209,6 +222,7 @@ export default function App() {
     setInvoices([])
     setAssistantMessages([])
     setFiscalProfile(emptyFiscalProfile)
+    setTaxPayments([])
     setActiveSection("resumen")
   }
 
@@ -326,6 +340,62 @@ export default function App() {
       ...profile,
       updatedAt: new Date().toISOString(),
     })
+  }
+
+  async function markTaxDuePaid(due: TaxDue) {
+    const paidAt = getTodayInputValue()
+
+    setTaxDueActionMonthKey(due.monthKey)
+    try {
+      if (isSupabaseConfigured) {
+        const savedTaxPayment = await markTaxPaymentAsPaid({
+          amount: due.amount,
+          monthKey: due.monthKey,
+          paidAt,
+        })
+
+        setTaxPayments((current) =>
+          upsertLocalTaxPayment(current, savedTaxPayment)
+        )
+        setDataStatus("connected")
+        return
+      }
+
+      setTaxPayments((current) =>
+        upsertLocalTaxPayment(current, {
+          amount: due.amount,
+          id: crypto.randomUUID(),
+          monthKey: due.monthKey,
+          paidAt,
+        })
+      )
+    } catch (error) {
+      console.error(error)
+      setDataStatus("error")
+      throw error
+    } finally {
+      setTaxDueActionMonthKey(null)
+    }
+  }
+
+  async function unmarkTaxDuePaid(due: TaxDue) {
+    setTaxDueActionMonthKey(due.monthKey)
+    try {
+      if (isSupabaseConfigured) {
+        await unmarkTaxPaymentAsPaid(due.monthKey)
+        setDataStatus("connected")
+      }
+
+      setTaxPayments((current) =>
+        current.filter((payment) => payment.monthKey !== due.monthKey)
+      )
+    } catch (error) {
+      console.error(error)
+      setDataStatus("error")
+      throw error
+    } finally {
+      setTaxDueActionMonthKey(null)
+    }
   }
 
   async function generateInvoice(
@@ -464,9 +534,13 @@ export default function App() {
           <DashboardView
             category={category}
             invoices={invoices}
+            onMarkTaxDuePaid={markTaxDuePaid}
             onOpenSection={setActiveSection}
+            onUnmarkTaxDuePaid={unmarkTaxDuePaid}
             payments={payments}
             profile={fiscalProfile}
+            taxDueActionMonthKey={taxDueActionMonthKey}
+            taxPayments={taxPayments}
           />
         )
     }
@@ -548,4 +622,21 @@ function createLocalAssistantMessage(
       minute: "2-digit",
     }),
   }
+}
+
+function upsertLocalTaxPayment(
+  taxPayments: TaxPayment[],
+  nextTaxPayment: TaxPayment
+) {
+  const exists = taxPayments.some(
+    (payment) => payment.monthKey === nextTaxPayment.monthKey
+  )
+
+  if (!exists) {
+    return [nextTaxPayment, ...taxPayments]
+  }
+
+  return taxPayments.map((payment) =>
+    payment.monthKey === nextTaxPayment.monthKey ? nextTaxPayment : payment
+  )
 }

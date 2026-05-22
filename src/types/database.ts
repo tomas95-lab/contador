@@ -184,6 +184,33 @@ export type Database = {
         }
         Relationships: []
       }
+      tax_payments: {
+        Row: {
+          id: string
+          month_key: string
+          amount: number
+          paid_at: string
+          user_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          month_key: string
+          amount: number
+          paid_at?: string
+          user_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          month_key?: string
+          amount?: number
+          paid_at?: string
+          user_id?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: Record<string, never>
     Functions: Record<string, never>

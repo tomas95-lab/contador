@@ -8,6 +8,7 @@ import type {
   IncomePayment,
   InvoiceStatus,
   TaxCategory,
+  TaxPayment,
   UserFiscalProfile,
 } from "@/types/accounting"
 import type { Database } from "@/types/database"
@@ -17,6 +18,7 @@ type InvoiceRow = Database["public"]["Tables"]["invoices"]["Row"]
 type AssistantMessageRow =
   Database["public"]["Tables"]["assistant_messages"]["Row"]
 type TaxSettingsRow = Database["public"]["Tables"]["tax_settings"]["Row"]
+type TaxPaymentRow = Database["public"]["Tables"]["tax_payments"]["Row"]
 type UserFiscalProfileRow =
   Database["public"]["Tables"]["user_fiscal_profiles"]["Row"]
 
@@ -279,6 +281,67 @@ export async function fetchTaxCategory(): Promise<TaxCategory> {
   return data ? mapTaxSettingsRow(data) : currentTaxCategory
 }
 
+export async function fetchTaxPayments() {
+  assertSupabase()
+
+  const { data, error } = await supabase!
+    .from("tax_payments")
+    .select("*")
+    .order("month_key", { ascending: false })
+
+  if (error) {
+    throw error
+  }
+
+  return data.map(mapTaxPaymentRow)
+}
+
+export async function markTaxPaymentAsPaid({
+  amount,
+  monthKey,
+  paidAt,
+}: {
+  amount: number
+  monthKey: string
+  paidAt: string
+}) {
+  assertSupabase()
+  const userId = await getCurrentUserId()
+
+  const { data, error } = await supabase!
+    .from("tax_payments")
+    .upsert(
+      {
+        amount,
+        month_key: monthKey,
+        paid_at: paidAt,
+        user_id: userId,
+      },
+      { onConflict: "user_id,month_key" }
+    )
+    .select("*")
+    .single()
+
+  if (error) {
+    throw error
+  }
+
+  return mapTaxPaymentRow(data)
+}
+
+export async function unmarkTaxPaymentAsPaid(monthKey: string) {
+  assertSupabase()
+
+  const { error } = await supabase!
+    .from("tax_payments")
+    .delete()
+    .eq("month_key", monthKey)
+
+  if (error) {
+    throw error
+  }
+}
+
 function mapPaymentRow(row: PaymentRow): IncomePayment {
   return {
     id: row.id,
@@ -288,6 +351,11 @@ function mapPaymentRow(row: PaymentRow): IncomePayment {
     description: row.description,
     method: row.method as IncomeMethod,
     invoiceStatus: row.invoice_status as InvoiceStatus,
+    source: row.source,
+    invoiceType: row.invoice_type,
+    pointOfSale: row.point_of_sale,
+    cae: row.cae,
+    receiverCuit: row.receiver_cuit,
   }
 }
 
@@ -326,6 +394,15 @@ function mapTaxSettingsRow(row: TaxSettingsRow): TaxCategory {
     annualLimit: Number(row.annual_limit),
     monthlyTax: Number(row.monthly_tax),
     warningAt: Number(row.warning_at),
+  }
+}
+
+function mapTaxPaymentRow(row: TaxPaymentRow): TaxPayment {
+  return {
+    id: row.id,
+    monthKey: row.month_key,
+    amount: Number(row.amount),
+    paidAt: row.paid_at,
   }
 }
 

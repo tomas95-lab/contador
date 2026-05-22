@@ -2,6 +2,7 @@ import type { ReactNode } from "react"
 import { CheckCircle2Icon, ClockIcon, XCircleIcon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
@@ -14,7 +15,10 @@ import { cn } from "@/lib/utils"
 import type { TaxDue, TaxDueStatus } from "@/types/accounting"
 
 type TaxDuesPanelProps = {
+  actionMonthKey?: string | null
   dues: TaxDue[]
+  onMarkPaid?: (due: TaxDue) => Promise<void>
+  onUnmarkPaid?: (due: TaxDue) => Promise<void>
 }
 
 const dueStatusMeta: Record<
@@ -50,7 +54,12 @@ const dueStatusMeta: Record<
   },
 }
 
-export function TaxDuesPanel({ dues }: TaxDuesPanelProps) {
+export function TaxDuesPanel({
+  actionMonthKey,
+  dues,
+  onMarkPaid,
+  onUnmarkPaid,
+}: TaxDuesPanelProps) {
   const nextDue = dues.find((due) => due.status !== "paid")
 
   return (
@@ -59,10 +68,15 @@ export function TaxDuesPanel({ dues }: TaxDuesPanelProps) {
         <div className="flex items-start justify-between gap-3">
           <div>
             <CardTitle>Cuotas monotributo</CardTitle>
-            <CardDescription>Pagadas, pendientes y proximo vencimiento</CardDescription>
+            <CardDescription>
+              Pagadas, pendientes y proximo vencimiento
+            </CardDescription>
           </div>
           {nextDue ? (
-            <Badge className={dueStatusMeta[nextDue.status].className} variant="outline">
+            <Badge
+              className={dueStatusMeta[nextDue.status].className}
+              variant="outline"
+            >
               {formatLongDate(nextDue.dueDate)}
             </Badge>
           ) : null}
@@ -74,10 +88,7 @@ export function TaxDuesPanel({ dues }: TaxDuesPanelProps) {
             const meta = dueStatusMeta[due.status]
 
             return (
-              <div
-                className="grid grid-cols-[1fr_auto] gap-3 p-3"
-                key={due.id}
-              >
+              <div className="grid grid-cols-[1fr_auto] gap-3 p-3" key={due.id}>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-medium">
@@ -92,11 +103,36 @@ export function TaxDuesPanel({ dues }: TaxDuesPanelProps) {
                     </Badge>
                   </div>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Vence {formatLongDate(due.dueDate)}
+                    {due.paidAt
+                      ? `Marcada pagada el ${formatLongDate(due.paidAt)}`
+                      : `Vence ${formatLongDate(due.dueDate)}`}
                   </p>
                 </div>
-                <div className="self-center text-right font-medium tabular-nums">
-                  {formatARS(due.amount)}
+                <div className="flex flex-col items-end gap-2 self-center">
+                  <div className="text-right font-medium tabular-nums">
+                    {formatARS(due.amount)}
+                  </div>
+                  {due.paidAt && onUnmarkPaid ? (
+                    <Button
+                      disabled={actionMonthKey === due.monthKey}
+                      onClick={() => void onUnmarkPaid(due)}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      Desmarcar
+                    </Button>
+                  ) : onMarkPaid && due.status !== "paid" ? (
+                    <Button
+                      disabled={actionMonthKey === due.monthKey}
+                      onClick={() => void onMarkPaid(due)}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      Marcar pagada
+                    </Button>
+                  ) : null}
                 </div>
               </div>
             )

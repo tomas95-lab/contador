@@ -1,5 +1,9 @@
 import type { FinancialMetrics } from "@/lib/accounting"
-import { formatARS, formatPercent } from "@/lib/accounting"
+import {
+  formatARS,
+  formatFiscalPeriodRange,
+  formatPercent,
+} from "@/lib/accounting"
 import { supabase } from "@/lib/supabase"
 import type { AssistantMessage, UserFiscalProfile } from "@/types/accounting"
 
@@ -91,7 +95,11 @@ function buildLocalReply({
     return `${userContext} trataria cripto como caso especial: separar fecha de cobro, valor en pesos de referencia, exchange o wallet usada y comprobantes. Antes de facturar, conviene revisar si corresponde declararlo como ingreso por servicio, diferencia de cambio o tenencia, porque cambia el encuadre.`
   }
 
-  if (/exterior|export|invoice|factura e|cliente afuera|usd|dolar/.test(normalized)) {
+  if (
+    /exterior|export|invoice|factura e|cliente afuera|usd|dolar/.test(
+      normalized
+    )
+  ) {
     return `${userContext} una factura a exterior necesita mirar moneda, tipo de comprobante, pais del cliente, concepto exportado y liquidacion de divisas. Si ya cobraste, cruza el importe con ARCA y deja trazado el tipo de cambio usado.`
   }
 
@@ -100,7 +108,9 @@ function buildLocalReply({
   }
 
   if (metrics.annualLimitRemaining <= 0) {
-    return `El acumulado anual ya supera el limite por ${formatARS(
+    return `El acumulado del periodo ${formatFiscalPeriodRange(
+      metrics.evaluationPeriod
+    )} ya supera el limite por ${formatARS(
       Math.abs(metrics.annualLimitRemaining)
     )}. Conviene revisar recategorizacion y facturacion pendiente.`
   }
@@ -108,14 +118,16 @@ function buildLocalReply({
   if (metrics.annualUsage >= 0.85) {
     return `Estas usando ${formatPercent(
       metrics.annualUsage
-    )} del limite anual. Te quedan ${formatARS(
+    )} del limite para ${metrics.evaluationPeriod.recategorizationLabel}. Te quedan ${formatARS(
       metrics.annualLimitRemaining
     )}; mira cualquier cobro nuevo antes de facturarlo.`
   }
 
   return `${userContext} el mes viene en ${formatARS(
     metrics.currentMonthRevenue
-  )}. El margen anual disponible es ${formatARS(metrics.annualLimitRemaining)}.`
+  )}. El margen del periodo ${formatFiscalPeriodRange(
+    metrics.evaluationPeriod
+  )} es ${formatARS(metrics.annualLimitRemaining)}.`
 }
 
 function normalizeText(value: string) {

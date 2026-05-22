@@ -42,7 +42,7 @@ const navMainItems: {
   },
   {
     id: "asistente",
-    title: "Asistente IA",
+    title: "Conta",
     icon: <MessageSquareIcon />,
   },
   {

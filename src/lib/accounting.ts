@@ -5,6 +5,7 @@ import type {
   RevenuePoint,
   TaxCategory,
   TaxDue,
+  TaxPayment,
   UserFiscalProfile,
 } from "@/types/accounting"
 import { taxCategories } from "@/data/accounting"
@@ -29,16 +30,36 @@ const longDateFormatter = new Intl.DateTimeFormat("es-AR", {
   month: "long",
 })
 
+export type FiscalEvaluationMode = "filing-window" | "preventive"
+
+export type FiscalEvaluationPeriod = {
+  startDate: string
+  endDate: string
+  label: string
+  recategorizationLabel: string
+  filingStartDate: string
+  filingEndDate: string
+  isFilingWindow: boolean
+  mode: FiscalEvaluationMode
+  statusLabel: string
+  counterLabel: string
+}
+
 export type FinancialMetrics = {
   currentMonthKey: string
   previousMonthKey: string
   currentMonthRevenue: number
   previousMonthRevenue: number
+  evaluationPeriod: FiscalEvaluationPeriod
   annualTotal: number
   annualLimitRemaining: number
   annualUsage: number
   currentVsPrevious: number
   projectedAnnual: number
+  projectedLimitRemaining: number
+  periodElapsedDays: number
+  periodTotalDays: number
+  periodElapsedRatio: number
   monthlyTarget: number
 }
 
@@ -114,6 +135,12 @@ export function formatLongDate(date: string) {
   return longDateFormatter.format(new Date(year, month - 1, day))
 }
 
+export function formatFiscalPeriodRange(period: FiscalEvaluationPeriod) {
+  return `${formatDateForDisplay(period.startDate)} al ${formatDateForDisplay(
+    period.endDate
+  )}`
+}
+
 export function sortPaymentsByDate(payments: IncomePayment[]) {
   return [...payments].sort((a, b) => b.date.localeCompare(a.date))
 }
@@ -126,6 +153,45 @@ export function sumPayments(payments: IncomePayment[]) {
   return payments.reduce((total, payment) => total + payment.amount, 0)
 }
 
+export function getFiscalEvaluationPeriod(
+  referenceDate = new Date()
+): FiscalEvaluationPeriod {
+  const today = startOfDay(referenceDate)
+  const year = today.getFullYear()
+  const januaryWindow = {
+    start: new Date(year, 0, 1),
+    end: new Date(year, 1, 5),
+  }
+  const julyWindow = {
+    start: new Date(year, 6, 1),
+    end: new Date(year, 7, 5),
+  }
+
+  if (isDateInRange(today, januaryWindow.start, januaryWindow.end)) {
+    return buildFiscalEvaluationPeriod("january", year, true)
+  }
+
+  if (isDateInRange(today, julyWindow.start, julyWindow.end)) {
+    return buildFiscalEvaluationPeriod("july", year, true)
+  }
+
+  if (today < julyWindow.start) {
+    return buildFiscalEvaluationPeriod("july", year, false)
+  }
+
+  return buildFiscalEvaluationPeriod("january", year + 1, false)
+}
+
+export function getPaymentsInFiscalPeriod(
+  payments: IncomePayment[],
+  period: FiscalEvaluationPeriod
+) {
+  return payments.filter(
+    (payment) =>
+      payment.date >= period.startDate && payment.date <= period.endDate
+  )
+}
+
 export function getFinancialMetrics(
   payments: IncomePayment[],
   category: TaxCategory,
@@ -133,7 +199,7 @@ export function getFinancialMetrics(
 ): FinancialMetrics {
   const currentMonthKey = getMonthKey(referenceDate)
   const previousMonthKey = getPreviousMonthKey(currentMonthKey)
-  const currentYear = currentMonthKey.slice(0, 4)
+  const evaluationPeriod = getFiscalEvaluationPeriod(referenceDate)
   const currentMonthRevenue = sumPayments(
     payments.filter((payment) => getMonthKey(payment.date) === currentMonthKey)
   )
@@ -141,7 +207,7 @@ export function getFinancialMetrics(
     payments.filter((payment) => getMonthKey(payment.date) === previousMonthKey)
   )
   const annualTotal = sumPayments(
-    payments.filter((payment) => payment.date.startsWith(currentYear))
+    getPaymentsInFiscalPeriod(payments, evaluationPeriod)
   )
   const annualLimitRemaining = category.annualLimit - annualTotal
   const annualUsage = annualTotal / category.annualLimit
@@ -149,8 +215,13 @@ export function getFinancialMetrics(
     previousMonthRevenue === 0
       ? 0
       : (currentMonthRevenue - previousMonthRevenue) / previousMonthRevenue
-  const monthNumber = Number(currentMonthKey.split("-")[1])
-  const projectedAnnual = (annualTotal / monthNumber) * 12
+  const { elapsedDays: periodElapsedDays, totalDays: periodTotalDays } =
+    getFiscalPeriodProgress(evaluationPeriod, referenceDate)
+  const projectedAnnual =
+    annualTotal > 0
+      ? (annualTotal / Math.max(periodElapsedDays, 1)) * periodTotalDays
+      : 0
+  const projectedLimitRemaining = category.annualLimit - projectedAnnual
   const monthlyTarget = category.annualLimit / 12
 
   return {
@@ -158,11 +229,16 @@ export function getFinancialMetrics(
     previousMonthKey,
     currentMonthRevenue,
     previousMonthRevenue,
+    evaluationPeriod,
     annualTotal,
     annualLimitRemaining,
     annualUsage,
     currentVsPrevious,
     projectedAnnual,
+    projectedLimitRemaining,
+    periodElapsedDays,
+    periodTotalDays,
+    periodElapsedRatio: periodElapsedDays / periodTotalDays,
     monthlyTarget,
   }
 }
@@ -172,13 +248,15 @@ export function getBillingScenario({
   category,
   payments,
   repeatCount,
+  referenceDate = new Date(),
 }: {
   addedAmount: number
   category: TaxCategory
   payments: IncomePayment[]
   repeatCount: number
+  referenceDate?: Date
 }): BillingScenario {
-  const metrics = getFinancialMetrics(payments, category)
+  const metrics = getFinancialMetrics(payments, category, referenceDate)
   const normalizedAmount = Math.max(0, addedAmount)
   const normalizedRepeatCount = Math.max(1, Math.round(repeatCount))
   const additionalTotal = normalizedAmount * normalizedRepeatCount
@@ -213,13 +291,18 @@ export function getProactiveAlerts({
   const metrics = getFinancialMetrics(payments, category, referenceDate)
   const alerts: ProactiveAlert[] = []
   const nextDueDate = getNextMonotributoDueDate(referenceDate)
-  const daysUntilDue = getDaysBetween(referenceDate, parseInputDate(nextDueDate))
+  const daysUntilDue = getDaysBetween(
+    referenceDate,
+    parseInputDate(nextDueDate)
+  )
   const pendingPayments = payments.filter(
     (payment) => payment.invoiceStatus === "pendiente"
   )
   const pendingTotal = sumPayments(pendingPayments)
   const oldestPending = pendingPayments
-    .map((payment) => getDaysBetween(parseInputDate(payment.date), referenceDate))
+    .map((payment) =>
+      getDaysBetween(parseInputDate(payment.date), referenceDate)
+    )
     .sort((a, b) => b - a)[0]
 
   if (daysUntilDue >= 0 && daysUntilDue <= 3) {
@@ -240,20 +323,24 @@ export function getProactiveAlerts({
   if (metrics.annualUsage >= 1) {
     alerts.push({
       id: "category-exceeded",
-      title: "Ya pasaste el limite de tu categoria",
+      title: "Ya pasaste el limite del periodo",
       description: `El acumulado supera la categoria ${
         category.key
-      } por ${formatARS(Math.abs(metrics.annualLimitRemaining))}.`,
+      } por ${formatARS(Math.abs(metrics.annualLimitRemaining))} en ${
+        metrics.evaluationPeriod.label
+      }.`,
       severity: "critical",
       action: "Revisar recategorizacion",
     })
   } else if (metrics.annualUsage >= category.warningAt) {
     alerts.push({
       id: "category-warning",
-      title: "Estas cerca del limite anual",
+      title: "Estas cerca del limite del periodo",
       description: `Usaste ${formatPercent(
         metrics.annualUsage
-      )} del tope. Quedan ${formatARS(metrics.annualLimitRemaining)}.`,
+      )} del tope. Quedan ${formatARS(metrics.annualLimitRemaining)} para ${
+        metrics.evaluationPeriod.recategorizationLabel
+      }.`,
       severity: "warning",
       action: "Simular cobro nuevo",
     })
@@ -263,7 +350,9 @@ export function getProactiveAlerts({
       title: "Tu ritmo actual proyecta recategorizacion",
       description: `Con este promedio anualizarias ${formatARS(
         metrics.projectedAnnual
-      )}, por encima de la categoria ${category.key}.`,
+      )} en ${metrics.evaluationPeriod.label}, por encima de la categoria ${
+        category.key
+      }.`,
       severity: "warning",
       action: "Ver proyeccion",
     })
@@ -325,31 +414,40 @@ export function getProactiveAlerts({
 
 export function getTaxDueHistory(
   category: TaxCategory,
-  referenceDate = new Date()
+  referenceDate = new Date(),
+  taxPayments: TaxPayment[] = []
 ): TaxDue[] {
   const currentYear = referenceDate.getFullYear()
   const currentMonth = referenceDate.getMonth()
   const today = startOfDay(referenceDate)
+  const paidByMonth = new Map(
+    taxPayments.map((payment) => [payment.monthKey, payment])
+  )
 
   return Array.from({ length: currentMonth + 1 }, (_, index) => {
+    const monthKey = `${currentYear}-${String(index + 1).padStart(2, "0")}`
     const dueDate = new Date(currentYear, index, 20)
     const dueDateValue = formatDateInputValue(dueDate)
     const isPastMonth = index < currentMonth
     const daysUntilDue = getDaysBetween(today, dueDate)
-    const status: TaxDue["status"] = isPastMonth
+    const taxPayment = paidByMonth.get(monthKey)
+    const status: TaxDue["status"] = taxPayment
       ? "paid"
-      : dueDate < today
-        ? "overdue"
-        : daysUntilDue <= 3
-          ? "due-soon"
-          : "pending"
+      : isPastMonth
+        ? "paid"
+        : dueDate < today
+          ? "overdue"
+          : daysUntilDue <= 3
+            ? "due-soon"
+            : "pending"
 
     return {
-      id: `${currentYear}-${String(index + 1).padStart(2, "0")}`,
-      monthKey: `${currentYear}-${String(index + 1).padStart(2, "0")}`,
+      id: monthKey,
+      monthKey,
       dueDate: dueDateValue,
       amount: category.monthlyTax,
       status,
+      paidAt: taxPayment?.paidAt ?? null,
     }
   }).reverse()
 }
@@ -368,17 +466,18 @@ export function getNextMonotributoDueDate(referenceDate = new Date()) {
 export function isFiscalProfileComplete(profile: UserFiscalProfile) {
   return Boolean(
     profile.activity.trim() &&
-      profile.workStatus.trim() &&
-      profile.currentCategory.trim() &&
-      profile.expectedMonthlyIncome
+    profile.workStatus.trim() &&
+    profile.currentCategory.trim() &&
+    profile.expectedMonthlyIncome
   )
 }
 
 export function hasComplexFiscalCase(profile: UserFiscalProfile) {
-  const normalized = `${profile.activity} ${profile.workStatus} ${profile.notes}`
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase()
+  const normalized =
+    `${profile.activity} ${profile.workStatus} ${profile.notes}`
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "")
+      .toLowerCase()
 
   return /cripto|crypto|exterior|export|usd|dolar|relacion de dependencia|dependencia/.test(
     normalized
@@ -445,6 +544,77 @@ function parseInputDate(date: string) {
   return new Date(year, month - 1, day)
 }
 
+function buildFiscalEvaluationPeriod(
+  window: "january" | "july",
+  filingYear: number,
+  isFilingWindow: boolean
+): FiscalEvaluationPeriod {
+  const isJanuaryWindow = window === "january"
+  const startDate = isJanuaryWindow
+    ? new Date(filingYear - 1, 0, 1)
+    : new Date(filingYear - 1, 6, 1)
+  const endDate = isJanuaryWindow
+    ? new Date(filingYear - 1, 11, 31)
+    : new Date(filingYear, 5, 30)
+  const filingStartDate = isJanuaryWindow
+    ? new Date(filingYear, 0, 1)
+    : new Date(filingYear, 6, 1)
+  const filingEndDate = isJanuaryWindow
+    ? new Date(filingYear, 1, 5)
+    : new Date(filingYear, 7, 5)
+  const recategorizationLabel = isJanuaryWindow
+    ? `enero/febrero ${filingYear}`
+    : `julio/agosto ${filingYear}`
+  const period = {
+    startDate: formatDateInputValue(startDate),
+    endDate: formatDateInputValue(endDate),
+  }
+
+  return {
+    ...period,
+    label: `${period.startDate} a ${period.endDate}`,
+    recategorizationLabel,
+    filingStartDate: formatDateInputValue(filingStartDate),
+    filingEndDate: formatDateInputValue(filingEndDate),
+    isFilingWindow,
+    mode: isFilingWindow ? "filing-window" : "preventive",
+    statusLabel: isFilingWindow
+      ? "Ventana de recategorizacion activa"
+      : "Fuera de ventana de tramite",
+    counterLabel: isFilingWindow
+      ? "Periodo oficial en evaluacion"
+      : "Periodo preventivo para la proxima recategorizacion",
+  }
+}
+
+function getFiscalPeriodProgress(
+  period: FiscalEvaluationPeriod,
+  referenceDate: Date
+) {
+  const startDate = parseInputDate(period.startDate)
+  const endDate = parseInputDate(period.endDate)
+  const today = startOfDay(referenceDate)
+  const cappedToday =
+    today < startDate ? startDate : today > endDate ? endDate : today
+  const totalDays = getDaysBetween(startDate, endDate) + 1
+  const elapsedDays = getDaysBetween(startDate, cappedToday) + 1
+
+  return {
+    elapsedDays: Math.min(Math.max(elapsedDays, 1), totalDays),
+    totalDays,
+  }
+}
+
+function formatDateForDisplay(date: string) {
+  const [year, month, day] = date.split("-")
+
+  return `${day}/${month}/${year}`
+}
+
+function isDateInRange(date: Date, start: Date, end: Date) {
+  return date >= startOfDay(start) && date <= startOfDay(end)
+}
+
 function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate())
 }
@@ -454,7 +624,9 @@ function getDaysBetween(from: Date, to: Date) {
   const toDate = startOfDay(to)
   const millisecondsPerDay = 24 * 60 * 60 * 1000
 
-  return Math.round((toDate.getTime() - fromDate.getTime()) / millisecondsPerDay)
+  return Math.round(
+    (toDate.getTime() - fromDate.getTime()) / millisecondsPerDay
+  )
 }
 
 function formatDateInputValue(date: Date) {

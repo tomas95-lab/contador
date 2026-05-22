@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge"
 import CardModified from "@/components/components_modified/Card.tsx"
 import {
   formatARS,
+  formatFiscalPeriodRange,
   formatMonthName,
   formatPercent,
   type FinancialMetrics,
@@ -50,18 +51,30 @@ export function SectionCards({ metrics, category }: SectionCardsProps) {
 
       <CardModified
         title={formatARS(metrics.annualTotal)}
-        description="Acumulado anual"
-        action={<Badge variant="outline">{formatPercent(metrics.annualUsage)} del limite</Badge>}
+        description="Acumulado fiscal"
+        action={
+          <Badge variant="outline">
+            {formatPercent(metrics.annualUsage)} del limite
+          </Badge>
+        }
         footerMain={`Limite cat. ${category.key}: ${formatARS(category.annualLimit)}`}
-        footerSub={`Quedan ${formatARS(metrics.annualLimitRemaining)} para el limite`}
-        variant={metrics.annualUsage >= category.warningAt ? "warning" : "default"}
+        footerSub={formatFiscalPeriodRange(metrics.evaluationPeriod)}
+        variant={
+          metrics.annualUsage >= category.warningAt ? "warning" : "default"
+        }
       />
 
       <CardModified
         title={category.key}
         description="Categoría actual"
-        action={<Badge variant="outline">Monotributo</Badge>}
-        footerMain="Próx. recategorización: Julio 2026"
+        action={
+          <Badge variant="outline">
+            {metrics.evaluationPeriod.mode === "filing-window"
+              ? "Tramite"
+              : "Preventivo"}
+          </Badge>
+        }
+        footerMain={`Recategorizacion: ${metrics.evaluationPeriod.recategorizationLabel}`}
         footerSub={`Limite anual ${formatARS(category.annualLimit)}`}
       />
     </div>

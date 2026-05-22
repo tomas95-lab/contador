@@ -32,6 +32,11 @@ export type IncomePayment = {
   description: string
   method: IncomeMethod
   invoiceStatus: InvoiceStatus
+  source?: string
+  invoiceType?: string | null
+  pointOfSale?: number | null
+  cae?: string | null
+  receiverCuit?: string | null
 }
 
 export type GeneratedInvoice = {
@@ -87,6 +92,14 @@ export type TaxDue = {
   dueDate: string
   amount: number
   status: TaxDueStatus
+  paidAt: string | null
+}
+
+export type TaxPayment = {
+  id: string
+  monthKey: string
+  amount: number
+  paidAt: string
 }
 
 export type ManagedClientStatus = "ok" | "watch" | "action"

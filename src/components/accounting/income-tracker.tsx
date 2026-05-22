@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select"
 import {
   formatARS,
+  formatShortMonth,
   getFinancialMetrics,
   getMonthKey,
   getTodayInputValue,
@@ -226,7 +227,9 @@ export function IncomeTracker({
               <CardDescription>Cobros del mes</CardDescription>
               <CardTitle className="flex items-center gap-2 text-2xl tabular-nums">
                 {currentMonthPayments.length}
-                <Badge variant="secondary">Mayo</Badge>
+                <Badge variant="secondary">
+                  {capitalize(formatShortMonth(metrics.currentMonthKey))}
+                </Badge>
               </CardTitle>
             </CardHeader>
           </Card>
@@ -247,4 +250,8 @@ export function IncomeTracker({
       </div>
     </div>
   )
+}
+
+function capitalize(value: string) {
+  return `${value.charAt(0).toUpperCase()}${value.slice(1)}`
 }
