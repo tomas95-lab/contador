@@ -21,7 +21,7 @@ import {
   ReceiptIcon,
   TrendingUpIcon,
   UsersRoundIcon,
-  PlugZapIcon
+  PlugZapIcon,
 } from "lucide-react"
 import type { AppSection } from "@/types/accounting"
 
@@ -29,6 +29,7 @@ const navMainItems: {
   id: AppSection
   title: string
   icon: React.ReactNode
+  badgeCount?: number
 }[] = [
   {
     id: "resumen",
@@ -58,7 +59,7 @@ const navMainItems: {
   {
     id: "clientes",
     title: "Clientes",
-    icon: <UsersRoundIcon />,  
+    icon: <UsersRoundIcon />,
   },
   {
     id: "arca",
@@ -86,6 +87,7 @@ type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
   activeSection: AppSection
   onSectionChange: (section: AppSection) => void
   onSignOut: () => void
+  unreadAlertCount?: number
   user: {
     name: string
     email: string
@@ -97,9 +99,23 @@ export function AppSidebar({
   activeSection,
   onSectionChange,
   onSignOut,
+  unreadAlertCount = 0,
   user,
   ...props
 }: AppSidebarProps) {
+  const mainItems = React.useMemo(
+    () =>
+      navMainItems.map((item) =>
+        item.id === "resumen"
+          ? {
+              ...item,
+              badgeCount: unreadAlertCount,
+            }
+          : item
+      ),
+    [unreadAlertCount]
+  )
+
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader>
@@ -120,7 +136,7 @@ export function AppSidebar({
       <SidebarContent>
         <NavMain
           activeItem={activeSection}
-          items={navMainItems}
+          items={mainItems}
           onCreatePayment={() => onSectionChange("cobros")}
           onSelect={onSectionChange}
         />

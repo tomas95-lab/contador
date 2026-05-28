@@ -15,7 +15,7 @@ export type Database = {
           point_of_sale: number | null
           cae: string | null
           receiver_cuit: string | null
-          user_id: string | null
+          user_id: string
           created_at: string
         }
         Insert: {
@@ -31,7 +31,7 @@ export type Database = {
           point_of_sale?: number | null
           cae?: string | null
           receiver_cuit?: string | null
-          user_id?: string | null
+          user_id: string
           created_at?: string
         }
         Update: {
@@ -47,7 +47,7 @@ export type Database = {
           point_of_sale?: number | null
           cae?: string | null
           receiver_cuit?: string | null
-          user_id?: string | null
+          user_id?: string
           created_at?: string
         }
         Relationships: []
@@ -66,7 +66,7 @@ export type Database = {
           cae: string | null
           cae_expires_at: string | null
           status: string
-          user_id: string | null
+          user_id: string
           created_at: string
         }
         Insert: {
@@ -82,7 +82,7 @@ export type Database = {
           cae?: string | null
           cae_expires_at?: string | null
           status?: string
-          user_id?: string | null
+          user_id: string
           created_at?: string
         }
         Update: {
@@ -98,7 +98,7 @@ export type Database = {
           cae?: string | null
           cae_expires_at?: string | null
           status?: string
-          user_id?: string | null
+          user_id?: string
           created_at?: string
         }
         Relationships: []
@@ -108,22 +108,106 @@ export type Database = {
           id: string
           role: string
           content: string
-          user_id: string | null
+          user_id: string
           created_at: string
         }
         Insert: {
           id?: string
           role: string
           content: string
-          user_id?: string | null
+          user_id: string
           created_at?: string
         }
         Update: {
           id?: string
           role?: string
           content?: string
-          user_id?: string | null
+          user_id?: string
           created_at?: string
+        }
+        Relationships: []
+      }
+      risk_alerts: {
+        Row: {
+          id: string
+          user_id: string
+          type: string
+          severity: string
+          title: string
+          message: string
+          action_label: string | null
+          action_url: string | null
+          is_read: boolean
+          is_resolved: boolean
+          metadata: Record<string, unknown> | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          type: string
+          severity: string
+          title: string
+          message: string
+          action_label?: string | null
+          action_url?: string | null
+          is_read?: boolean
+          is_resolved?: boolean
+          metadata?: Record<string, unknown> | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          type?: string
+          severity?: string
+          title?: string
+          message?: string
+          action_label?: string | null
+          action_url?: string | null
+          is_read?: boolean
+          is_resolved?: boolean
+          metadata?: Record<string, unknown> | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      foreign_clients: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          country_code: string
+          tax_id: string | null
+          address: string | null
+          platform: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          country_code: string
+          tax_id?: string | null
+          address?: string | null
+          platform?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          country_code?: string
+          tax_id?: string | null
+          address?: string | null
+          platform?: string | null
+          created_at?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -160,6 +244,7 @@ export type Database = {
       tax_settings: {
         Row: {
           id: string
+          user_id: string
           category_key: string
           annual_limit: number
           monthly_tax: number
@@ -168,6 +253,7 @@ export type Database = {
         }
         Insert: {
           id?: string
+          user_id: string
           category_key: string
           annual_limit: number
           monthly_tax: number
@@ -176,10 +262,47 @@ export type Database = {
         }
         Update: {
           id?: string
+          user_id?: string
           category_key?: string
           annual_limit?: number
           monthly_tax?: number
           warning_at?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      user_arca_credentials: {
+        Row: {
+          id: string
+          user_id: string
+          cuit: string
+          certificate: string
+          private_key: string
+          wsfe_pto_vta: number
+          wsfex_pto_vta: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          cuit: string
+          certificate: string
+          private_key: string
+          wsfe_pto_vta?: number
+          wsfex_pto_vta?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          cuit?: string
+          certificate?: string
+          private_key?: string
+          wsfe_pto_vta?: number
+          wsfex_pto_vta?: number
+          created_at?: string
           updated_at?: string
         }
         Relationships: []

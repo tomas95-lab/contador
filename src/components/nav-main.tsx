@@ -1,5 +1,6 @@
 import type { ReactNode } from "react"
 
+import { Badge } from "@/components/ui/badge"
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -14,6 +15,7 @@ type NavMainItem = {
   id: AppSection
   title: string
   icon?: ReactNode
+  badgeCount?: number
 }
 
 export function NavMain({
@@ -52,6 +54,14 @@ export function NavMain({
               >
                 {item.icon}
                 <span>{item.title}</span>
+                {item.badgeCount ? (
+                  <Badge
+                    className="ml-auto h-5 min-w-5 justify-center rounded-full px-1 text-xs"
+                    variant="destructive"
+                  >
+                    {item.badgeCount > 99 ? "99+" : item.badgeCount}
+                  </Badge>
+                ) : null}
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}

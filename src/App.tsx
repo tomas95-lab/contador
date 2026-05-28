@@ -5,12 +5,14 @@ import { AssistantPanel } from "@/components/accounting/assistant-panel"
 import { AccountantClientsPanel } from "@/components/accounting/accountant-clients-panel"
 import { AuthScreen } from "@/components/auth-screen"
 import { ArcaConnectView } from "@/components/accounting/arca-connect-view"
+import { ArcaOnboarding } from "@/components/accounting/arca-onboarding"
 import { DashboardView } from "@/components/accounting/dashboard-view"
 import { IncomeTracker } from "@/components/accounting/income-tracker"
 import { InvoicingPanel } from "@/components/accounting/invoicing-panel"
 import { ProjectionsPanel } from "@/components/accounting/projections-panel"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SiteHeader } from "@/components/site-header"
+import { Button } from "@/components/ui/button"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import {
   currentTaxCategory,
@@ -19,6 +21,7 @@ import {
 } from "@/data/accounting"
 import { getTodayInputValue } from "@/lib/accounting"
 import { emitArcaInvoice } from "@/lib/arca-api"
+import { fetchArcaCredentialsStatus } from "@/lib/arca-credentials-api"
 import { isSupabaseConfigured, supabase } from "@/lib/supabase"
 import {
   createAssistantMessage,
@@ -54,13 +57,21 @@ import type {
 
 type DataStatus = "loading" | "connected" | "local" | "demo" | "error"
 type AuthStatus = "loading" | "authenticated" | "anonymous"
+type ArcaCredentialsStatus = "loading" | "configured" | "missing" | "error"
 type InvoiceEmissionOptions = {
   invoiceType?: InvoiceKind
+  currencyId?: "DOL" | "PES"
+  exchangeRate?: number
   clientCuit?: string
   clientName?: string
   clientAddress?: string
   clientTaxId?: string
   destinationCountryCode?: number
+  foreignClientCountryCode?: string
+  foreignClientTaxId?: string
+  foreignClientName?: string
+  foreignClientAddress?: string
+  foreignClientPlatform?: string
   receiverIvaConditionId?: number
 }
 
@@ -115,8 +126,7 @@ export default function App() {
   const [taxDueActionMonthKey, setTaxDueActionMonthKey] = React.useState<
     string | null
   >(null)
-  const [isDemoSession, setIsDemoSession] =
-    React.useState(getStoredDemoSession)
+  const [isDemoSession, setIsDemoSession] = React.useState(getStoredDemoSession)
   const [session, setSession] = React.useState<Session | null>(null)
   const [authStatus, setAuthStatus] = React.useState<AuthStatus>(() =>
     getStoredDemoSession()
@@ -125,7 +135,14 @@ export default function App() {
         ? "loading"
         : "anonymous"
   )
+  const [arcaCredentialsStatus, setArcaCredentialsStatus] =
+    React.useState<ArcaCredentialsStatus>("loading")
+  const arcaCredentialsStatusRef = React.useRef<ArcaCredentialsStatus | null>(
+    null
+  )
+  const arcaCredentialsUserKeyRef = React.useRef<string | null>(null)
   const [dataStatus, setDataStatus] = React.useState<DataStatus>("loading")
+  const [unreadAlertCount, setUnreadAlertCount] = React.useState(0)
   const activeMeta = sectionMeta[activeSection]
   const isDemoActive = isDemoSession && authStatus === "authenticated"
   const shouldUseSupabase =
@@ -169,6 +186,58 @@ export default function App() {
       subscription.unsubscribe()
     }
   }, [isDemoSession])
+
+  React.useEffect(() => {
+    let cancelled = false
+
+    async function loadArcaCredentialsStatus() {
+      if (!shouldUseSupabase) {
+        arcaCredentialsStatusRef.current = "configured"
+        arcaCredentialsUserKeyRef.current = null
+        setArcaCredentialsStatus("configured")
+        return
+      }
+
+      const userKey = session?.user.id ?? session?.user.email ?? "authenticated"
+
+      if (
+        arcaCredentialsUserKeyRef.current === userKey &&
+        arcaCredentialsStatusRef.current
+      ) {
+        setArcaCredentialsStatus(arcaCredentialsStatusRef.current)
+        return
+      }
+
+      setArcaCredentialsStatus("loading")
+
+      try {
+        const status = await fetchArcaCredentialsStatus()
+        const nextStatus: ArcaCredentialsStatus = status.configured
+          ? "configured"
+          : "missing"
+
+        if (!cancelled) {
+          arcaCredentialsUserKeyRef.current = userKey
+          arcaCredentialsStatusRef.current = nextStatus
+          setArcaCredentialsStatus(nextStatus)
+        }
+      } catch (error) {
+        console.error(error)
+
+        if (!cancelled) {
+          arcaCredentialsUserKeyRef.current = userKey
+          arcaCredentialsStatusRef.current = "error"
+          setArcaCredentialsStatus("error")
+        }
+      }
+    }
+
+    void loadArcaCredentialsStatus()
+
+    return () => {
+      cancelled = true
+    }
+  }, [shouldUseSupabase, session?.user.email, session?.user.id])
 
   React.useEffect(() => {
     let cancelled = false
@@ -254,11 +323,15 @@ export default function App() {
     setIsDemoSession(false)
     setSession(null)
     setAuthStatus("anonymous")
+    arcaCredentialsStatusRef.current = null
+    arcaCredentialsUserKeyRef.current = null
+    setArcaCredentialsStatus("loading")
     setPayments([])
     setInvoices([])
     setAssistantMessages([])
     setFiscalProfile(emptyFiscalProfile)
     setTaxPayments([])
+    setUnreadAlertCount(0)
     setActiveSection("resumen")
   }
 
@@ -273,6 +346,7 @@ export default function App() {
     setAssistantMessages(initialAssistantMessages)
     setFiscalProfile(emptyFiscalProfile)
     setTaxPayments([])
+    setUnreadAlertCount(0)
     setActiveSection("resumen")
   }
 
@@ -488,11 +562,18 @@ export default function App() {
     try {
       const arcaInvoice = await emitArcaInvoice({
         amount: payment.amount,
+        currencyId: options.currencyId,
+        exchangeRate: options.exchangeRate,
         clientCuit: options.clientCuit,
         clientName: options.clientName,
         clientAddress: options.clientAddress,
         clientTaxId: options.clientTaxId,
         destinationCountryCode: options.destinationCountryCode,
+        foreignClientCountryCode: options.foreignClientCountryCode,
+        foreignClientTaxId: options.foreignClientTaxId,
+        foreignClientName: options.foreignClientName,
+        foreignClientAddress: options.foreignClientAddress,
+        foreignClientPlatform: options.foreignClientPlatform,
         description: payment.description,
         invoiceType: invoiceKind,
         receiverIvaConditionId: options.receiverIvaConditionId,
@@ -592,6 +673,7 @@ export default function App() {
       case "facturacion":
         return (
           <InvoicingPanel
+            category={category}
             invoices={invoices}
             onGenerateInvoice={generateInvoice}
             payments={payments}
@@ -617,6 +699,7 @@ export default function App() {
             onMarkTaxDuePaid={markTaxDuePaid}
             onOpenSection={setActiveSection}
             onUnmarkTaxDuePaid={unmarkTaxDuePaid}
+            onUnreadAlertsChange={setUnreadAlertCount}
             payments={payments}
             profile={fiscalProfile}
             taxDueActionMonthKey={taxDueActionMonthKey}
@@ -652,6 +735,46 @@ export default function App() {
     avatar: "",
   }
 
+  if (shouldUseSupabase && arcaCredentialsStatus === "loading") {
+    return (
+      <div className="flex min-h-svh items-center justify-center bg-background text-sm text-muted-foreground">
+        Verificando conexion con ARCA...
+      </div>
+    )
+  }
+
+  if (shouldUseSupabase && arcaCredentialsStatus === "missing") {
+    return (
+      <ArcaOnboarding
+        onComplete={() => {
+          arcaCredentialsStatusRef.current = "configured"
+          arcaCredentialsUserKeyRef.current =
+            session?.user.id ?? session?.user.email ?? "authenticated"
+          setArcaCredentialsStatus("configured")
+          setActiveSection("resumen")
+        }}
+        onSignOut={() => void handleSignOut()}
+      />
+    )
+  }
+
+  if (shouldUseSupabase && arcaCredentialsStatus === "error") {
+    return (
+      <div className="flex min-h-svh items-center justify-center bg-background p-4">
+        <div className="max-w-md rounded-lg border bg-card p-4 text-sm shadow-sm">
+          <div className="font-medium">No se pudo verificar ARCA</div>
+          <p className="mt-2 text-muted-foreground">
+            Revisá que el backend esté encendido y tenga configurada la service
+            role key de Supabase.
+          </p>
+          <Button className="mt-4" onClick={() => void handleSignOut()}>
+            Salir
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <SidebarProvider
       style={
@@ -665,6 +788,7 @@ export default function App() {
         activeSection={activeSection}
         onSectionChange={setActiveSection}
         onSignOut={() => void handleSignOut()}
+        unreadAlertCount={unreadAlertCount}
         user={sidebarUser}
         variant="inset"
       />

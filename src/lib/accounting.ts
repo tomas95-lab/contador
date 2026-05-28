@@ -61,6 +61,10 @@ export type FinancialMetrics = {
   periodTotalDays: number
   periodElapsedRatio: number
   monthlyTarget: number
+  riskScore: number
+  projectedBreachDate: string | null
+  daysUntilBreach: number | null
+  monthsWithoutInvoices: number
 }
 
 export type BillingScenario = {
@@ -206,9 +210,8 @@ export function getFinancialMetrics(
   const previousMonthRevenue = sumPayments(
     payments.filter((payment) => getMonthKey(payment.date) === previousMonthKey)
   )
-  const annualTotal = sumPayments(
-    getPaymentsInFiscalPeriod(payments, evaluationPeriod)
-  )
+  const periodPayments = getPaymentsInFiscalPeriod(payments, evaluationPeriod)
+  const annualTotal = sumPayments(periodPayments)
   const annualLimitRemaining = category.annualLimit - annualTotal
   const annualUsage = annualTotal / category.annualLimit
   const currentVsPrevious =
@@ -223,6 +226,23 @@ export function getFinancialMetrics(
       : 0
   const projectedLimitRemaining = category.annualLimit - projectedAnnual
   const monthlyTarget = category.annualLimit / 12
+  const projectedBreach = getProjectedBreach({
+    annualTotal,
+    category,
+    evaluationPeriod,
+    periodElapsedDays,
+    referenceDate,
+  })
+  const monthsWithoutInvoices = getMonthsWithoutInvoices(
+    periodPayments,
+    evaluationPeriod,
+    referenceDate
+  )
+  const riskScore = getRiskScore({
+    annualUsage,
+    daysUntilBreach: projectedBreach.daysUntilBreach,
+    monthsWithoutInvoices,
+  })
 
   return {
     currentMonthKey,
@@ -240,6 +260,10 @@ export function getFinancialMetrics(
     periodTotalDays,
     periodElapsedRatio: periodElapsedDays / periodTotalDays,
     monthlyTarget,
+    riskScore,
+    projectedBreachDate: projectedBreach.projectedBreachDate,
+    daysUntilBreach: projectedBreach.daysUntilBreach,
+    monthsWithoutInvoices,
   }
 }
 
@@ -299,6 +323,10 @@ export function getProactiveAlerts({
     (payment) => payment.invoiceStatus === "pendiente"
   )
   const pendingTotal = sumPayments(pendingPayments)
+  const arcaDifference = getArcaAppDifference(
+    payments,
+    metrics.evaluationPeriod
+  )
   const oldestPending = pendingPayments
     .map((payment) =>
       getDaysBetween(parseInputDate(payment.date), referenceDate)
@@ -332,6 +360,19 @@ export function getProactiveAlerts({
       severity: "critical",
       action: "Revisar recategorizacion",
     })
+  } else if (
+    metrics.daysUntilBreach !== null &&
+    metrics.daysUntilBreach <= 60
+  ) {
+    alerts.push({
+      id: "projected-breach-soon",
+      title: "Tu ritmo cruza el limite pronto",
+      description: `Si seguis igual, cruzarias el tope en ${
+        metrics.daysUntilBreach
+      } dias, alrededor del ${formatLongDate(metrics.projectedBreachDate!)}.`,
+      severity: metrics.daysUntilBreach < 30 ? "critical" : "warning",
+      action: "Ver proyeccion",
+    })
   } else if (metrics.annualUsage >= category.warningAt) {
     alerts.push({
       id: "category-warning",
@@ -355,6 +396,48 @@ export function getProactiveAlerts({
       }.`,
       severity: "warning",
       action: "Ver proyeccion",
+    })
+  }
+
+  if (
+    metrics.evaluationPeriod.isFilingWindow &&
+    (metrics.annualUsage >= 0.8 ||
+      metrics.projectedAnnual >= category.annualLimit)
+  ) {
+    alerts.push({
+      id: "recategorization-window-risk",
+      title: "Recategorizacion activa con riesgo",
+      description: `Estas en ventana de tramite hasta el ${formatLongDate(
+        metrics.evaluationPeriod.filingEndDate
+      )}. Revisá categoria ${category.key} con ${formatPercent(
+        metrics.annualUsage
+      )} del limite usado.`,
+      severity: metrics.annualUsage >= 0.95 ? "critical" : "warning",
+      action: "Revisar categoria",
+    })
+  }
+
+  if (metrics.monthsWithoutInvoices >= 2) {
+    alerts.push({
+      id: "months-without-invoices",
+      title: "Hay meses sin facturas emitidas",
+      description: `${metrics.monthsWithoutInvoices} meses seguidos sin facturas registradas. Si hubo actividad, conviene revisar comprobantes y pagos.`,
+      severity: "warning",
+      action: "Revisar facturacion",
+    })
+  }
+
+  if (arcaDifference && arcaDifference.ratio > 0.1) {
+    alerts.push({
+      id: "arca-app-delta",
+      title: "ARCA y la app no coinciden",
+      description: `La diferencia entre facturacion ARCA (${formatARS(
+        arcaDifference.arcaTotal
+      )}) y registros de la app (${formatARS(
+        arcaDifference.appTotal
+      )}) supera el 10%.`,
+      severity: "warning",
+      action: "Conciliar datos",
     })
   }
 
@@ -401,7 +484,7 @@ export function getProactiveAlerts({
   if (profile && !isFiscalProfileComplete(profile)) {
     alerts.push({
       id: "profile-incomplete",
-      title: "Falta completar tu onboarding fiscal",
+      title: "Completá tu perfil para que Conta te dé consejos más precisos",
       description:
         "Actividad, categoria e ingreso esperado hacen que los avisos sean mucho mas precisos desde el dia 1.",
       severity: "info",
@@ -409,7 +492,7 @@ export function getProactiveAlerts({
     })
   }
 
-  return alerts.slice(0, 5)
+  return alerts.sort(compareAlertsBySeverity).slice(0, 6)
 }
 
 export function getTaxDueHistory(
@@ -538,6 +621,160 @@ export function getTodayInputValue() {
   return formatDateInputValue(new Date())
 }
 
+function getProjectedBreach({
+  annualTotal,
+  category,
+  evaluationPeriod,
+  periodElapsedDays,
+  referenceDate,
+}: {
+  annualTotal: number
+  category: TaxCategory
+  evaluationPeriod: FiscalEvaluationPeriod
+  periodElapsedDays: number
+  referenceDate: Date
+}) {
+  if (annualTotal >= category.annualLimit) {
+    return {
+      projectedBreachDate: formatDateInputValue(referenceDate),
+      daysUntilBreach: 0,
+    }
+  }
+
+  if (annualTotal <= 0) {
+    return {
+      projectedBreachDate: null,
+      daysUntilBreach: null,
+    }
+  }
+
+  const dailyAverage = annualTotal / Math.max(periodElapsedDays, 1)
+  const daysUntilBreach = Math.ceil(
+    (category.annualLimit - annualTotal) / dailyAverage
+  )
+  const breachDate = addDays(referenceDate, daysUntilBreach)
+  const periodEndDate = parseInputDate(evaluationPeriod.endDate)
+
+  if (breachDate > periodEndDate) {
+    return {
+      projectedBreachDate: null,
+      daysUntilBreach: null,
+    }
+  }
+
+  return {
+    projectedBreachDate: formatDateInputValue(breachDate),
+    daysUntilBreach,
+  }
+}
+
+function getMonthsWithoutInvoices(
+  periodPayments: IncomePayment[],
+  period: FiscalEvaluationPeriod,
+  referenceDate: Date
+) {
+  if (periodPayments.length === 0) {
+    return 0
+  }
+
+  const firstActivityMonth = periodPayments
+    .map((payment) => getMonthKey(payment.date))
+    .sort()[0]
+  const invoicedMonths = new Set(
+    periodPayments
+      .filter((payment) => payment.invoiceStatus === "facturado" || payment.cae)
+      .map((payment) => getMonthKey(payment.date))
+  )
+  const currentDate = startOfDay(referenceDate)
+  const periodStartDate = parseInputDate(period.startDate)
+  const periodEndDate = parseInputDate(period.endDate)
+  const cappedDate =
+    currentDate < periodStartDate
+      ? periodStartDate
+      : currentDate > periodEndDate
+        ? periodEndDate
+        : currentDate
+  let monthKey = getMonthKey(cappedDate)
+  let monthsWithoutInvoices = 0
+
+  while (monthKey >= firstActivityMonth) {
+    if (invoicedMonths.has(monthKey)) {
+      break
+    }
+
+    monthsWithoutInvoices += 1
+    monthKey = getPreviousMonthKey(monthKey)
+  }
+
+  return monthsWithoutInvoices
+}
+
+function getRiskScore({
+  annualUsage,
+  daysUntilBreach,
+  monthsWithoutInvoices,
+}: {
+  annualUsage: number
+  daysUntilBreach: number | null
+  monthsWithoutInvoices: number
+}) {
+  let score = clamp(Math.round(annualUsage * 100), 0, 100)
+
+  if (daysUntilBreach !== null) {
+    const breachScore =
+      daysUntilBreach <= 0
+        ? 100
+        : daysUntilBreach < 30
+          ? 95
+          : daysUntilBreach < 60
+            ? 85
+            : 70
+
+    score = Math.max(score, breachScore)
+  }
+
+  if (monthsWithoutInvoices >= 2) {
+    score += Math.min(20, monthsWithoutInvoices * 5)
+  }
+
+  return clamp(score, 0, 100)
+}
+
+function getArcaAppDifference(
+  payments: IncomePayment[],
+  period: FiscalEvaluationPeriod
+) {
+  const periodPayments = getPaymentsInFiscalPeriod(payments, period)
+  const arcaTotal = sumPayments(periodPayments.filter(isArcaPayment))
+  const appTotal = sumPayments(
+    periodPayments.filter((payment) => !isArcaPayment(payment))
+  )
+
+  if (arcaTotal <= 0 || appTotal <= 0) {
+    return null
+  }
+
+  return {
+    arcaTotal,
+    appTotal,
+    ratio: Math.abs(arcaTotal - appTotal) / Math.max(arcaTotal, appTotal),
+  }
+}
+
+function isArcaPayment(payment: IncomePayment) {
+  return payment.source?.startsWith("arca") === true
+}
+
+function compareAlertsBySeverity(left: ProactiveAlert, right: ProactiveAlert) {
+  const severityOrder: Record<ProactiveAlert["severity"], number> = {
+    critical: 0,
+    warning: 1,
+    info: 2,
+  }
+
+  return severityOrder[left.severity] - severityOrder[right.severity]
+}
+
 function parseInputDate(date: string) {
   const [year, month, day] = date.split("-").map(Number)
 
@@ -627,6 +864,17 @@ function getDaysBetween(from: Date, to: Date) {
   return Math.round(
     (toDate.getTime() - fromDate.getTime()) / millisecondsPerDay
   )
+}
+
+function addDays(date: Date, days: number) {
+  const nextDate = startOfDay(date)
+
+  nextDate.setDate(nextDate.getDate() + days)
+  return nextDate
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max)
 }
 
 function formatDateInputValue(date: Date) {

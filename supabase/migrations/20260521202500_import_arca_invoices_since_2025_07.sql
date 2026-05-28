@@ -32,86 +32,86 @@ begin
     (
       '2025-07-02',
       500000,
-      'DLP CAPITAL PARTNERS S.A.',
-      'Factura C historica ARCA PV 2 Nro 00000009 - CAE 75274895792683',
+      'Cliente ARCA',
+      'Factura C historica ARCA PV 2 Nro 00000009 - CAE 00000000000001',
       'Transferencia',
       'facturado',
       target_user_id,
       'arca_historical',
       'C',
       2,
-      '75274895792683',
-      '30711998612'
+      '00000000000001',
+      '00000000000'
     ),
     (
       '2025-08-31',
       1000000,
-      'DLP CAPITAL PARTNERS S.A.',
-      'Factura C historica ARCA PV 2 Nro 00000010 - CAE 75364315999667',
+      'Cliente ARCA',
+      'Factura C historica ARCA PV 2 Nro 00000010 - CAE 00000000000002',
       'Transferencia',
       'facturado',
       target_user_id,
       'arca_historical',
       'C',
       2,
-      '75364315999667',
-      '30711998612'
+      '00000000000002',
+      '00000000000'
     ),
     (
       '2026-01-09',
       900000,
-      'DLP CAPITAL PARTNERS S.A.',
-      'Factura C historica ARCA PV 2 Nro 00000011 - CAE 76024185196388',
+      'Cliente ARCA',
+      'Factura C historica ARCA PV 2 Nro 00000011 - CAE 00000000000003',
       'Transferencia',
       'facturado',
       target_user_id,
       'arca_historical',
       'C',
       2,
-      '76024185196388',
-      '30711998612'
+      '00000000000003',
+      '00000000000'
     ),
     (
       '2026-03-05',
       900000,
-      'DLP CAPITAL PARTNERS S.A.',
-      'Factura C historica ARCA PV 2 Nro 00000012 - CAE 86106370512794',
+      'Cliente ARCA',
+      'Factura C historica ARCA PV 2 Nro 00000012 - CAE 00000000000004',
       'Transferencia',
       'facturado',
       target_user_id,
       'arca_historical',
       'C',
       2,
-      '86106370512794',
-      '30711998612'
+      '00000000000004',
+      '00000000000'
     ),
     (
       '2026-04-02',
       1000000,
-      'DLP CAPITAL PARTNERS S.A.',
-      'Factura C historica ARCA PV 2 Nro 00000013 - CAE 86140043571398',
+      'Cliente ARCA',
+      'Factura C historica ARCA PV 2 Nro 00000013 - CAE 00000000000005',
       'Transferencia',
       'facturado',
       target_user_id,
       'arca_historical',
       'C',
       2,
-      '86140043571398',
-      '30711998612'
+      '00000000000005',
+      '00000000000'
     ),
     (
       '2026-05-18',
       2000000,
-      'DLP CAPITAL PARTNERS S.A.',
-      'Factura C historica ARCA PV 2 Nro 00000014 - CAE 86206100858726',
+      'Cliente ARCA',
+      'Factura C historica ARCA PV 2 Nro 00000014 - CAE 00000000000006',
       'Transferencia',
       'facturado',
       target_user_id,
       'arca_historical',
       'C',
       2,
-      '86206100858726',
-      '30711998612'
+      '00000000000006',
+      '00000000000'
     )
   on conflict (source, invoice_type, point_of_sale, cae) where cae is not null
   do update set

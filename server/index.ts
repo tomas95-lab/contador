@@ -6,10 +6,18 @@ import express, {
   type Request,
   type Response,
 } from "express"
+import jwt, { type GetPublicKeyOrSecret, type JwtPayload } from "jsonwebtoken"
+import jwksClient from "jwks-rsa"
+
 import { ZodError } from "zod"
 
 import { ArcaError } from "./arca/errors.js"
 import { config } from "./config.js"
+import {
+  generateArcaCsr,
+  getArcaCredentialsStatus,
+  saveArcaCredentials,
+} from "./routes/credentials.js"
 import {
   emitInvoice,
   getAnnualArcaSummary,
@@ -17,14 +25,40 @@ import {
   getHistoricalArcaInvoices,
 } from "./routes/invoices.js"
 
+declare global {
+  namespace Express {
+    interface Request {
+      userId?: string
+    }
+  }
+}
+
+const supabaseUrl = normalizeSupabaseUrl(
+  process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL
+)
+const supabaseIssuer = `${supabaseUrl}/auth/v1`
+const supabaseJwksClient = jwksClient({
+  cache: true,
+  jwksUri: `${supabaseIssuer}/.well-known/jwks.json`,
+  rateLimit: true,
+})
+
+if (!config.corsOrigin) {
+  throw new Error("CORS_ORIGIN is required.")
+}
+
 const app = express()
+const allowedOrigins = config.corsOrigin
+  .split(",")
+  .map((origin) => origin.trim())
 
 app.use(
   cors({
-    origin: config.corsOrigin ? config.corsOrigin.split(",") : true,
+    origin: allowedOrigins,
   })
 )
 app.use(express.json({ limit: "1mb" }))
+app.use("/api", authenticateJwt)
 
 app.get("/api/health", (_req, res) => {
   res.json({
@@ -33,10 +67,108 @@ app.get("/api/health", (_req, res) => {
   })
 })
 
+app.get("/api/credentials/status", getArcaCredentialsStatus)
+app.post("/api/credentials/generate-csr", generateArcaCsr)
+app.post("/api/credentials/save", saveArcaCredentials)
 app.post("/api/invoices/emit", emitInvoice)
 app.get("/api/invoices/arca/annual-summary", getAnnualArcaSummary)
 app.get("/api/invoices/arca/historical", getHistoricalArcaInvoices)
 app.get("/api/invoices/arca/points-of-sale", getArcaPointOfSales)
+
+async function authenticateJwt(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  const token = getBearerToken(req)
+
+  if (!token) {
+    res.status(401).json({ error: "Unauthorized" })
+    return
+  }
+
+  try {
+    const payload = await verifySupabaseToken(token)
+
+    if (typeof payload === "string" || !isJwtPayloadWithSubject(payload)) {
+      res.status(401).json({ error: "Unauthorized" })
+      return
+    }
+
+    req.userId = payload.sub
+    next()
+  } catch {
+    res.status(401).json({ error: "Unauthorized" })
+  }
+}
+
+function verifySupabaseToken(token: string) {
+  return new Promise<string | JwtPayload>((resolve, reject) => {
+    jwt.verify(
+      token,
+      getSupabaseSigningKey,
+      {
+        algorithms: ["ES256"],
+        audience: "authenticated",
+        issuer: supabaseIssuer,
+      },
+      (error, decoded) => {
+        if (error || !decoded) {
+          reject(error ?? new Error("Invalid token"))
+          return
+        }
+
+        resolve(decoded)
+      }
+    )
+  })
+}
+
+const getSupabaseSigningKey: GetPublicKeyOrSecret = (header, callback) => {
+  if (!header.kid) {
+    callback(new Error("Missing JWT kid."))
+    return
+  }
+
+  supabaseJwksClient.getSigningKey(header.kid, (error, key) => {
+    if (error || !key) {
+      callback(error ?? new Error("Missing Supabase signing key."))
+      return
+    }
+
+    callback(null, key.getPublicKey())
+  })
+}
+
+function getBearerToken(req: Request) {
+  const authorization = req.header("authorization")
+
+  if (!authorization) {
+    return null
+  }
+
+  const [scheme, token] = authorization.split(" ")
+
+  if (scheme?.toLowerCase() !== "bearer" || !token) {
+    return null
+  }
+
+  return token
+}
+
+function isJwtPayloadWithSubject(
+  payload: JwtPayload
+): payload is JwtPayload & { sub: string } {
+  return typeof payload.sub === "string" && payload.sub.length > 0
+}
+
+function normalizeSupabaseUrl(value: string | undefined) {
+  if (!value) {
+    throw new Error("SUPABASE_URL or VITE_SUPABASE_URL is required.")
+  }
+
+  return value.replace(/\/+$/, "")
+}
 
 app.use((req, res) => {
   res.status(404).json({

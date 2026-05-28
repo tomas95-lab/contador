@@ -11,6 +11,7 @@ import {
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Card,
   CardContent,
@@ -19,6 +20,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -29,19 +31,42 @@ import {
 import {
   formatARS,
   formatPaymentDate,
+  formatPercent,
+  getFinancialMetrics,
   sortInvoicesByDate,
   sumPayments,
 } from "@/lib/accounting"
 import { fetchArcaAnnualSummary, type ArcaAnnualSummary } from "@/lib/arca-api"
-import type { GeneratedInvoice, IncomePayment } from "@/types/accounting"
+import {
+  fetchForeignClients,
+  saveForeignClient,
+  type ForeignClient,
+} from "@/lib/foreign-clients-api"
+import type {
+  GeneratedInvoice,
+  IncomePayment,
+  TaxCategory,
+} from "@/types/accounting"
 
 type InvoicingPanelProps = {
+  category: TaxCategory
   invoices: GeneratedInvoice[]
   onGenerateInvoice: (
     payment: IncomePayment,
     options?: {
       invoiceType?: "C" | "E"
+      currencyId?: "DOL" | "PES"
+      exchangeRate?: number
       clientCuit?: string
+      clientName?: string
+      clientAddress?: string
+      clientTaxId?: string
+      destinationCountryCode?: number
+      foreignClientCountryCode?: string
+      foreignClientTaxId?: string
+      foreignClientName?: string
+      foreignClientAddress?: string
+      foreignClientPlatform?: string
       receiverIvaConditionId?: number
     }
   ) => Promise<void>
@@ -55,7 +80,28 @@ const ivaConditionOptions = [
   { label: "Consumidor final", value: "5" },
 ]
 
+const foreignCountryOptions = [
+  { label: "USA", value: "840" },
+  { label: "España", value: "724" },
+  { label: "Uruguay", value: "858" },
+  { label: "Brasil", value: "076" },
+  { label: "Reino Unido", value: "826" },
+  { label: "Alemania", value: "276" },
+  { label: "Canadá", value: "124" },
+  { label: "Francia", value: "250" },
+  { label: "Países Bajos", value: "528" },
+]
+
+const platformOptions = [
+  { label: "Deel", value: "deel" },
+  { label: "Payoneer", value: "payoneer" },
+  { label: "Wise", value: "wise" },
+  { label: "Transferencia directa", value: "directo" },
+  { label: "Otro", value: "otro" },
+]
+
 export function InvoicingPanel({
+  category,
   invoices,
   onGenerateInvoice,
   payments,
@@ -74,6 +120,37 @@ export function InvoicingPanel({
   const [receiverIvaConditions, setReceiverIvaConditions] = React.useState<
     Record<string, string>
   >({})
+  const [invoiceTypes, setInvoiceTypes] = React.useState<
+    Record<string, "C" | "E">
+  >({})
+  const [foreignClients, setForeignClients] = React.useState<ForeignClient[]>(
+    []
+  )
+  const [selectedForeignClientIds, setSelectedForeignClientIds] =
+    React.useState<Record<string, string>>({})
+  const [foreignClientNames, setForeignClientNames] = React.useState<
+    Record<string, string>
+  >({})
+  const [foreignClientCountryCodes, setForeignClientCountryCodes] =
+    React.useState<Record<string, string>>({})
+  const [foreignClientTaxIds, setForeignClientTaxIds] = React.useState<
+    Record<string, string>
+  >({})
+  const [foreignClientAddresses, setForeignClientAddresses] = React.useState<
+    Record<string, string>
+  >({})
+  const [foreignClientPlatforms, setForeignClientPlatforms] = React.useState<
+    Record<string, string>
+  >({})
+  const [exportCurrencyIds, setExportCurrencyIds] = React.useState<
+    Record<string, "DOL" | "PES">
+  >({})
+  const [exchangeRates, setExchangeRates] = React.useState<
+    Record<string, string>
+  >({})
+  const [saveClientByPayment, setSaveClientByPayment] = React.useState<
+    Record<string, boolean>
+  >({})
   const pendingPayments = payments.filter(
     (payment) => payment.invoiceStatus === "pendiente"
   )
@@ -82,6 +159,7 @@ export function InvoicingPanel({
   )
   const sortedInvoices = sortInvoicesByDate(invoices)
   const currentYear = new Date().getFullYear()
+  const metrics = getFinancialMetrics(payments, category)
 
   React.useEffect(() => {
     let cancelled = false
@@ -118,6 +196,28 @@ export function InvoicingPanel({
     }
   }, [currentYear])
 
+  React.useEffect(() => {
+    let cancelled = false
+
+    async function loadForeignClients() {
+      try {
+        const clients = await fetchForeignClients()
+
+        if (!cancelled) {
+          setForeignClients(clients)
+        }
+      } catch (error) {
+        console.error(error)
+      }
+    }
+
+    void loadForeignClients()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   async function handleFetchArcaSummary() {
     if (isSyncingArca) {
       return
@@ -144,6 +244,7 @@ export function InvoicingPanel({
       return
     }
 
+    const invoiceType = invoiceTypes[payment.id] ?? "C"
     const clientCuit = receiverCuits[payment.id]?.trim()
     const ivaConditionId = clientCuit
       ? Number(receiverIvaConditions[payment.id] ?? "1")
@@ -151,14 +252,42 @@ export function InvoicingPanel({
     const ivaCondition = ivaConditionOptions.find(
       (option) => Number(option.value) === ivaConditionId
     )
-    const receiver = clientCuit
-      ? `CUIT receptor ${clientCuit}, ${ivaCondition?.label ?? "IVA receptor"}`
-      : "consumidor final"
-    const confirmed = window.confirm(
-      `Emitir Factura C real en ARCA por ${formatARS(
-        payment.amount
-      )} para ${payment.client} (${receiver})?`
-    )
+    let confirmed = false
+
+    if (invoiceType === "C") {
+      const receiver = clientCuit
+        ? `CUIT receptor ${clientCuit}, ${
+            ivaCondition?.label ?? "IVA receptor"
+          }`
+        : "consumidor final"
+
+      confirmed = window.confirm(
+        `Emitir Factura C real en ARCA por ${formatARS(
+          payment.amount
+        )} para ${payment.client} (${receiver})?`
+      )
+    } else {
+      const validationError = validateExportInvoice(payment)
+
+      if (validationError) {
+        setInvoiceError(validationError)
+        return
+      }
+
+      const currencyId = getExportCurrencyId(payment.id)
+      const exchangeRate = getExchangeRate(payment.id)
+      const amountArs = getExportAmountArs(payment)
+
+      confirmed = window.confirm(
+        `Emitir Factura E real en ARCA por ${
+          currencyId === "DOL"
+            ? `USD ${formatNumber(payment.amount)} (${formatARS(amountArs)})`
+            : formatARS(payment.amount)
+        } para ${foreignClientNames[payment.id]?.trim()}? Tipo de cambio: ${
+          currencyId === "DOL" ? exchangeRate : 1
+        }.`
+      )
+    }
 
     if (!confirmed) {
       return
@@ -168,20 +297,56 @@ export function InvoicingPanel({
     setInvoiceError("")
 
     try {
-      await onGenerateInvoice(payment, {
-        clientCuit: clientCuit || undefined,
-        receiverIvaConditionId: ivaConditionId,
-      })
-      setReceiverCuits((current) => {
-        const next = { ...current }
-        delete next[payment.id]
-        return next
-      })
-      setReceiverIvaConditions((current) => {
-        const next = { ...current }
-        delete next[payment.id]
-        return next
-      })
+      if (invoiceType === "C") {
+        await onGenerateInvoice(payment, {
+          clientCuit: clientCuit || undefined,
+          invoiceType,
+          receiverIvaConditionId: ivaConditionId,
+        })
+        clearDomesticInvoiceState(payment.id)
+      } else {
+        const currencyId = getExportCurrencyId(payment.id)
+        const exchangeRate = getExchangeRate(payment.id)
+        const countryCode = foreignClientCountryCodes[payment.id]?.trim()
+        const foreignClientName = foreignClientNames[payment.id]?.trim()
+        const foreignClientAddress =
+          foreignClientAddresses[payment.id]?.trim() || undefined
+        const foreignClientTaxId =
+          foreignClientTaxIds[payment.id]?.trim() || undefined
+        const foreignClientPlatform =
+          foreignClientPlatforms[payment.id]?.trim() || undefined
+
+        await onGenerateInvoice(payment, {
+          currencyId,
+          exchangeRate,
+          foreignClientAddress,
+          foreignClientCountryCode: countryCode,
+          foreignClientName,
+          foreignClientPlatform,
+          foreignClientTaxId,
+          invoiceType,
+        })
+
+        if (saveClientByPayment[payment.id]) {
+          try {
+            await saveForeignClient({
+              address: foreignClientAddress,
+              countryCode,
+              name: foreignClientName,
+              platform: foreignClientPlatform,
+              taxId: foreignClientTaxId,
+            })
+            setForeignClients(await fetchForeignClients())
+          } catch (error) {
+            console.error(error)
+            setInvoiceError(
+              "La factura se emitió, pero no pude guardar el cliente exterior."
+            )
+          }
+        }
+
+        clearExportInvoiceState(payment.id)
+      }
     } catch (error) {
       setInvoiceError(
         error instanceof Error
@@ -198,6 +363,106 @@ export function InvoicingPanel({
       ...current,
       [paymentId]: value.replace(/\D/g, "").slice(0, 11),
     }))
+  }
+
+  function applySavedForeignClient(paymentId: string, clientId: string) {
+    setSelectedForeignClientIds((current) => ({
+      ...current,
+      [paymentId]: clientId,
+    }))
+
+    const client = foreignClients.find((item) => item.id === clientId)
+
+    if (!client) {
+      return
+    }
+
+    setForeignClientNames((current) => ({
+      ...current,
+      [paymentId]: client.name,
+    }))
+    setForeignClientCountryCodes((current) => ({
+      ...current,
+      [paymentId]: client.countryCode,
+    }))
+    setForeignClientTaxIds((current) => ({
+      ...current,
+      [paymentId]: client.taxId ?? "",
+    }))
+    setForeignClientAddresses((current) => ({
+      ...current,
+      [paymentId]: client.address ?? "",
+    }))
+    setForeignClientPlatforms((current) => ({
+      ...current,
+      [paymentId]: client.platform ?? "",
+    }))
+  }
+
+  function validateExportInvoice(payment: IncomePayment) {
+    const name = foreignClientNames[payment.id]?.trim()
+    const countryCode = foreignClientCountryCodes[payment.id]?.trim()
+    const currencyId = getExportCurrencyId(payment.id)
+    const exchangeRate = getExchangeRate(payment.id)
+
+    if (!name) {
+      return "Para Factura E necesito el nombre del cliente exterior."
+    }
+
+    if (!countryCode) {
+      return "Para Factura E necesito el país del cliente exterior."
+    }
+
+    if (currencyId === "DOL" && exchangeRate <= 0) {
+      return "Para Factura E en USD necesito un tipo de cambio positivo."
+    }
+
+    return ""
+  }
+
+  function getExportCurrencyId(paymentId: string): "DOL" | "PES" {
+    return exportCurrencyIds[paymentId] ?? "DOL"
+  }
+
+  function getExchangeRate(paymentId: string) {
+    return Number((exchangeRates[paymentId] ?? "0").replace(",", "."))
+  }
+
+  function getExportAmountArs(payment: IncomePayment) {
+    const currencyId = getExportCurrencyId(payment.id)
+    const exchangeRate = getExchangeRate(payment.id)
+
+    return currencyId === "DOL" ? payment.amount * exchangeRate : payment.amount
+  }
+
+  function getCategoryImpact(payment: IncomePayment) {
+    const remaining = metrics.annualLimitRemaining
+
+    if (remaining <= 0) {
+      return "Sin margen disponible en la categoría actual."
+    }
+
+    return `Esta factura representa ${formatPercent(
+      getExportAmountArs(payment) / remaining
+    )} de tu límite anual restante.`
+  }
+
+  function clearDomesticInvoiceState(paymentId: string) {
+    setReceiverCuits((current) => omitKey(current, paymentId))
+    setReceiverIvaConditions((current) => omitKey(current, paymentId))
+  }
+
+  function clearExportInvoiceState(paymentId: string) {
+    setInvoiceTypes((current) => omitKey(current, paymentId))
+    setSelectedForeignClientIds((current) => omitKey(current, paymentId))
+    setForeignClientNames((current) => omitKey(current, paymentId))
+    setForeignClientCountryCodes((current) => omitKey(current, paymentId))
+    setForeignClientTaxIds((current) => omitKey(current, paymentId))
+    setForeignClientAddresses((current) => omitKey(current, paymentId))
+    setForeignClientPlatforms((current) => omitKey(current, paymentId))
+    setExportCurrencyIds((current) => omitKey(current, paymentId))
+    setExchangeRates((current) => omitKey(current, paymentId))
+    setSaveClientByPayment((current) => omitKey(current, paymentId))
   }
 
   return (
@@ -243,73 +508,139 @@ export function InvoicingPanel({
             {pendingPayments.length > 0 ? (
               <div className="space-y-2">
                 {pendingPayments.map((payment) => (
-                  <div
-                    key={payment.id}
-                    className="flex flex-col gap-3 rounded-lg border p-3 md:flex-row md:items-center md:justify-between"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{payment.client}</span>
-                        <Badge variant="outline">
-                          {formatPaymentDate(payment.date)}
-                        </Badge>
+                  <div key={payment.id} className="rounded-lg border p-3">
+                    <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-start">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium">{payment.client}</span>
+                          <Badge variant="outline">
+                            {formatPaymentDate(payment.date)}
+                          </Badge>
+                          <Badge variant="secondary">
+                            {invoiceTypes[payment.id] === "E"
+                              ? "Factura E Pro"
+                              : "Factura C"}
+                          </Badge>
+                        </div>
+                        <p className="mt-1 truncate text-sm text-muted-foreground">
+                          {payment.description}
+                        </p>
+                        <span className="mt-2 block font-medium tabular-nums">
+                          {formatARS(payment.amount)}
+                        </span>
                       </div>
-                      <p className="mt-1 truncate text-sm text-muted-foreground">
-                        {payment.description}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-3">
-                      <span className="font-medium tabular-nums">
-                        {formatARS(payment.amount)}
-                      </span>
-                      <Input
-                        aria-label={`CUIT receptor de ${payment.client}`}
-                        className="h-9 w-36"
-                        inputMode="numeric"
-                        onChange={(event) =>
-                          updateReceiverCuit(payment.id, event.target.value)
-                        }
-                        placeholder="CUIT receptor"
-                        value={receiverCuits[payment.id] ?? ""}
-                      />
                       <Select
-                        disabled={!receiverCuits[payment.id]}
                         onValueChange={(value) =>
-                          setReceiverIvaConditions((current) => ({
+                          setInvoiceTypes((current) => ({
                             ...current,
-                            [payment.id]: value,
+                            [payment.id]: value as "C" | "E",
                           }))
                         }
-                        value={receiverIvaConditions[payment.id] ?? "1"}
+                        value={invoiceTypes[payment.id] ?? "C"}
                       >
                         <SelectTrigger
-                          aria-label={`Condicion IVA de ${payment.client}`}
+                          aria-label={`Tipo de factura de ${payment.client}`}
                           className="h-9 w-40"
                         >
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {ivaConditionOptions.map((option) => (
-                            <SelectItem
-                              key={option.value}
-                              value={option.value}
-                            >
-                              {option.label}
-                            </SelectItem>
-                          ))}
+                          <SelectItem value="C">Factura C</SelectItem>
+                          <SelectItem value="E">Factura E Pro</SelectItem>
                         </SelectContent>
                       </Select>
-                      <Button
-                        disabled={issuingPaymentId !== null}
-                        onClick={() => void handleGenerateInvoice(payment)}
-                        size="sm"
-                      >
-                        <FilePlus2Icon />
-                        {issuingPaymentId === payment.id
-                          ? "Emitiendo"
-                          : "Emitir C"}
-                      </Button>
                     </div>
+                    {(invoiceTypes[payment.id] ?? "C") === "E" ? (
+                      <ExportInvoiceFields
+                        amountArs={getExportAmountArs(payment)}
+                        categoryImpact={getCategoryImpact(payment)}
+                        clientAddress={foreignClientAddresses[payment.id] ?? ""}
+                        clientName={foreignClientNames[payment.id] ?? ""}
+                        clientTaxId={foreignClientTaxIds[payment.id] ?? ""}
+                        countryCode={
+                          foreignClientCountryCodes[payment.id] ?? ""
+                        }
+                        currencyId={getExportCurrencyId(payment.id)}
+                        exchangeRate={exchangeRates[payment.id] ?? ""}
+                        foreignClients={foreignClients}
+                        isIssuing={issuingPaymentId !== null}
+                        onClientAddressChange={(value) =>
+                          setForeignClientAddresses((current) => ({
+                            ...current,
+                            [payment.id]: value,
+                          }))
+                        }
+                        onClientNameChange={(value) =>
+                          setForeignClientNames((current) => ({
+                            ...current,
+                            [payment.id]: value,
+                          }))
+                        }
+                        onClientTaxIdChange={(value) =>
+                          setForeignClientTaxIds((current) => ({
+                            ...current,
+                            [payment.id]: value,
+                          }))
+                        }
+                        onCountryCodeChange={(value) =>
+                          setForeignClientCountryCodes((current) => ({
+                            ...current,
+                            [payment.id]: value,
+                          }))
+                        }
+                        onCurrencyChange={(value) =>
+                          setExportCurrencyIds((current) => ({
+                            ...current,
+                            [payment.id]: value,
+                          }))
+                        }
+                        onEmit={() => void handleGenerateInvoice(payment)}
+                        onExchangeRateChange={(value) =>
+                          setExchangeRates((current) => ({
+                            ...current,
+                            [payment.id]: value.replace(/[^\d.,]/g, ""),
+                          }))
+                        }
+                        onPlatformChange={(value) =>
+                          setForeignClientPlatforms((current) => ({
+                            ...current,
+                            [payment.id]: value,
+                          }))
+                        }
+                        onSaveClientChange={(checked) =>
+                          setSaveClientByPayment((current) => ({
+                            ...current,
+                            [payment.id]: checked,
+                          }))
+                        }
+                        onSavedClientChange={(clientId) =>
+                          applySavedForeignClient(payment.id, clientId)
+                        }
+                        payment={payment}
+                        platform={foreignClientPlatforms[payment.id] ?? ""}
+                        saveClient={Boolean(saveClientByPayment[payment.id])}
+                        selectedClientId={
+                          selectedForeignClientIds[payment.id] ?? ""
+                        }
+                      />
+                    ) : (
+                      <DomesticInvoiceFields
+                        clientCuit={receiverCuits[payment.id] ?? ""}
+                        ivaCondition={receiverIvaConditions[payment.id] ?? "1"}
+                        isIssuing={issuingPaymentId !== null}
+                        onClientCuitChange={(value) =>
+                          updateReceiverCuit(payment.id, value)
+                        }
+                        onEmit={() => void handleGenerateInvoice(payment)}
+                        onIvaConditionChange={(value) =>
+                          setReceiverIvaConditions((current) => ({
+                            ...current,
+                            [payment.id]: value,
+                          }))
+                        }
+                        payment={payment}
+                      />
+                    )}
                   </div>
                 ))}
               </div>
@@ -455,6 +786,263 @@ export function InvoicingPanel({
   )
 }
 
+function DomesticInvoiceFields({
+  clientCuit,
+  ivaCondition,
+  isIssuing,
+  onClientCuitChange,
+  onEmit,
+  onIvaConditionChange,
+  payment,
+}: {
+  clientCuit: string
+  ivaCondition: string
+  isIssuing: boolean
+  onClientCuitChange: (value: string) => void
+  onEmit: () => void
+  onIvaConditionChange: (value: string) => void
+  payment: IncomePayment
+}) {
+  return (
+    <div className="mt-3 flex flex-col gap-3 md:flex-row md:items-end md:justify-end">
+      <div className="space-y-1">
+        <Label htmlFor={`receiver-cuit-${payment.id}`}>CUIT receptor</Label>
+        <Input
+          id={`receiver-cuit-${payment.id}`}
+          aria-label={`CUIT receptor de ${payment.client}`}
+          className="h-9 w-full md:w-36"
+          inputMode="numeric"
+          onChange={(event) => onClientCuitChange(event.target.value)}
+          placeholder="Opcional"
+          value={clientCuit}
+        />
+      </div>
+      <div className="space-y-1">
+        <Label>Condición IVA</Label>
+        <Select
+          disabled={!clientCuit}
+          onValueChange={onIvaConditionChange}
+          value={ivaCondition}
+        >
+          <SelectTrigger
+            aria-label={`Condición IVA de ${payment.client}`}
+            className="h-9 w-full md:w-40"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {ivaConditionOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <Button disabled={isIssuing} onClick={onEmit} size="sm">
+        <FilePlus2Icon />
+        {isIssuing ? "Emitiendo" : "Emitir C"}
+      </Button>
+    </div>
+  )
+}
+
+function ExportInvoiceFields({
+  amountArs,
+  categoryImpact,
+  clientAddress,
+  clientName,
+  clientTaxId,
+  countryCode,
+  currencyId,
+  exchangeRate,
+  foreignClients,
+  isIssuing,
+  onClientAddressChange,
+  onClientNameChange,
+  onClientTaxIdChange,
+  onCountryCodeChange,
+  onCurrencyChange,
+  onEmit,
+  onExchangeRateChange,
+  onPlatformChange,
+  onSaveClientChange,
+  onSavedClientChange,
+  payment,
+  platform,
+  saveClient,
+  selectedClientId,
+}: {
+  amountArs: number
+  categoryImpact: string
+  clientAddress: string
+  clientName: string
+  clientTaxId: string
+  countryCode: string
+  currencyId: "DOL" | "PES"
+  exchangeRate: string
+  foreignClients: ForeignClient[]
+  isIssuing: boolean
+  onClientAddressChange: (value: string) => void
+  onClientNameChange: (value: string) => void
+  onClientTaxIdChange: (value: string) => void
+  onCountryCodeChange: (value: string) => void
+  onCurrencyChange: (value: "DOL" | "PES") => void
+  onEmit: () => void
+  onExchangeRateChange: (value: string) => void
+  onPlatformChange: (value: string) => void
+  onSaveClientChange: (checked: boolean) => void
+  onSavedClientChange: (clientId: string) => void
+  payment: IncomePayment
+  platform: string
+  saveClient: boolean
+  selectedClientId: string
+}) {
+  const parsedRate = Number(exchangeRate.replace(",", "."))
+  const canShowArsAmount =
+    currencyId === "PES" || (Number.isFinite(parsedRate) && parsedRate > 0)
+
+  return (
+    <div className="mt-4 space-y-4 rounded-lg border bg-muted/20 p-3">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="space-y-1">
+          <Label>Usar cliente guardado</Label>
+          <Select
+            onValueChange={(value) => {
+              if (value !== "manual") {
+                onSavedClientChange(value)
+              }
+            }}
+            value={selectedClientId || "manual"}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="manual">Cargar manualmente</SelectItem>
+              {foreignClients.map((client) => (
+                <SelectItem key={client.id} value={client.id}>
+                  {client.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor={`foreign-name-${payment.id}`}>
+            Nombre del cliente o empresa
+          </Label>
+          <Input
+            id={`foreign-name-${payment.id}`}
+            onChange={(event) => onClientNameChange(event.target.value)}
+            value={clientName}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label>País</Label>
+          <Select onValueChange={onCountryCodeChange} value={countryCode}>
+            <SelectTrigger>
+              <SelectValue placeholder="Seleccionar país" />
+            </SelectTrigger>
+            <SelectContent>
+              {foreignCountryOptions.map((country) => (
+                <SelectItem key={country.value} value={country.value}>
+                  {country.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor={`foreign-tax-${payment.id}`}>
+            Identificación fiscal
+          </Label>
+          <Input
+            id={`foreign-tax-${payment.id}`}
+            onChange={(event) => onClientTaxIdChange(event.target.value)}
+            placeholder="EIN, VAT, etc"
+            value={clientTaxId}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor={`foreign-address-${payment.id}`}>Domicilio</Label>
+          <Input
+            id={`foreign-address-${payment.id}`}
+            onChange={(event) => onClientAddressChange(event.target.value)}
+            placeholder="Ciudad, país"
+            value={clientAddress}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label>Plataforma de cobro</Label>
+          <Select onValueChange={onPlatformChange} value={platform}>
+            <SelectTrigger>
+              <SelectValue placeholder="Seleccionar" />
+            </SelectTrigger>
+            <SelectContent>
+              {platformOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-[160px_1fr_1fr]">
+        <div className="space-y-1">
+          <Label>Moneda</Label>
+          <Select onValueChange={onCurrencyChange} value={currencyId}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="DOL">USD</SelectItem>
+              <SelectItem value="PES">ARS</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        {currencyId === "DOL" ? (
+          <div className="space-y-1">
+            <Label htmlFor={`exchange-rate-${payment.id}`}>
+              Tipo de cambio
+            </Label>
+            <Input
+              id={`exchange-rate-${payment.id}`}
+              inputMode="decimal"
+              onChange={(event) => onExchangeRateChange(event.target.value)}
+              placeholder="Usá el tipo de cambio oficial del día"
+              value={exchangeRate}
+            />
+          </div>
+        ) : null}
+        <div className="rounded-lg border bg-background p-3 text-sm">
+          <div className="text-muted-foreground">Equivalente en ARS</div>
+          <div className="mt-1 font-medium tabular-nums">
+            {canShowArsAmount ? formatARS(amountArs) : "-"}
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">{categoryImpact}</p>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <label className="flex items-center gap-2 text-sm">
+          <Checkbox
+            checked={saveClient}
+            onCheckedChange={(checked) => onSaveClientChange(checked === true)}
+          />
+          Guardar este cliente para próximas facturas
+        </label>
+        <Button disabled={isIssuing} onClick={onEmit} size="sm">
+          <FilePlus2Icon />
+          {isIssuing ? "Emitiendo" : "Emitir E"}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 function downloadInvoiceHtml(invoice: GeneratedInvoice) {
   const html = buildInvoiceHtml(invoice)
   const blob = new Blob([html], {
@@ -508,7 +1096,9 @@ function buildInvoiceHtml(invoice: GeneratedInvoice) {
       <div>
         <h1>${escapeHtml(invoice.invoiceType)}</h1>
         <p class="muted">${
-          isIssued ? "Comprobante fiscal emitido" : "Comprobante interno no fiscal"
+          isIssued
+            ? "Comprobante fiscal emitido"
+            : "Comprobante interno no fiscal"
         }</p>
       </div>
       <div class="type">${escapeHtml(invoiceLetter)}</div>
@@ -540,6 +1130,20 @@ function buildInvoiceHtml(invoice: GeneratedInvoice) {
   </section>
 </body>
 </html>`
+}
+
+function omitKey<T>(record: Record<string, T>, key: string) {
+  const next = { ...record }
+
+  delete next[key]
+
+  return next
+}
+
+function formatNumber(value: number) {
+  return new Intl.NumberFormat("es-AR", {
+    maximumFractionDigits: 2,
+  }).format(value)
 }
 
 function escapeHtml(value: string) {

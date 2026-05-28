@@ -2,13 +2,19 @@ import { Badge } from "@/components/ui/badge"
 import CardModified from "@/components/components_modified/Card.tsx"
 import {
   formatARS,
-  formatFiscalPeriodRange,
-  formatMonthName,
+  formatLongDate,
   formatPercent,
+  getNextMonotributoDueDate,
   type FinancialMetrics,
 } from "@/lib/accounting"
+import { taxCategories } from "@/data/accounting"
 import type { TaxCategory } from "@/types/accounting"
-import { TrendingDownIcon, TrendingUpIcon } from "lucide-react"
+import {
+  CalendarClockIcon,
+  GaugeIcon,
+  ShieldAlertIcon,
+  TrendingUpIcon,
+} from "lucide-react"
 
 type SectionCardsProps = {
   metrics: FinancialMetrics
@@ -16,67 +22,119 @@ type SectionCardsProps = {
 }
 
 export function SectionCards({ metrics, category }: SectionCardsProps) {
-  const isPositive = metrics.currentVsPrevious >= 0
+  const projectedCategory =
+    taxCategories.find((item) => metrics.projectedAnnual <= item.annualLimit) ??
+    taxCategories[taxCategories.length - 1]
+  const projectedGoesUp = projectedCategory.annualLimit > category.annualLimit
+  const nextMilestone = getNextFiscalMilestone(metrics)
+  const hasBreachProjection = metrics.daysUntilBreach !== null
 
   return (
     <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
       <CardModified
-        title={formatARS(metrics.currentMonthRevenue)}
-        description="Facturado este mes"
+        title={formatARS(metrics.annualLimitRemaining)}
+        description="Margen hasta recategorizacion"
         action={
           <Badge
             variant="outline"
             className={
-              isPositive
-                ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300"
-                : "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300"
+              metrics.annualUsage >= 0.8
+                ? "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900 dark:bg-orange-950 dark:text-orange-300"
+                : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300"
             }
           >
-            {isPositive ? <TrendingUpIcon /> : <TrendingDownIcon />}
-            {formatPercent(metrics.currentVsPrevious)}
+            <ShieldAlertIcon />
+            {formatPercent(metrics.annualUsage)}
           </Badge>
         }
-        footerMain={`vs ${formatARS(metrics.previousMonthRevenue)} el mes anterior`}
-        footerSub={formatMonthName(metrics.currentMonthKey)}
-        variant={isPositive ? "success" : "warning"}
+        footerMain={`Usaste ${formatARS(metrics.annualTotal)} de categoria ${category.key}`}
+        footerSub={`Limite: ${formatARS(category.annualLimit)}`}
+        variant={metrics.annualUsage >= 0.8 ? "warning" : "success"}
       />
 
       <CardModified
-        title={formatARS(metrics.previousMonthRevenue)}
-        description="Mes anterior"
-        action={<Badge variant="secondary">Cerrado</Badge>}
-        footerMain={formatMonthName(metrics.previousMonthKey)}
-        footerSub="Período cerrado"
+        title={`Cat. ${projectedCategory.key}`}
+        description="Ritmo proyectado"
+        action={
+          <Badge
+            className={
+              projectedGoesUp
+                ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300"
+                : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300"
+            }
+            variant="outline"
+          >
+            <TrendingUpIcon />
+            {projectedGoesUp ? "Sube" : "OK"}
+          </Badge>
+        }
+        footerMain={`Proyeccion: ${formatARS(metrics.projectedAnnual)}`}
+        footerSub={`Actual: categoria ${category.key}`}
+        variant={projectedGoesUp ? "warning" : "success"}
       />
 
       <CardModified
-        title={formatARS(metrics.annualTotal)}
-        description="Acumulado fiscal"
+        title={
+          hasBreachProjection ? `${metrics.daysUntilBreach} dias` : "Sin cruce"
+        }
+        description="Dias hasta riesgo"
+        action={
+          <Badge
+            className={
+              hasBreachProjection
+                ? "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900 dark:bg-orange-950 dark:text-orange-300"
+                : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300"
+            }
+            variant="outline"
+          >
+            <GaugeIcon />
+            {metrics.riskScore}/100
+          </Badge>
+        }
+        footerMain={
+          metrics.projectedBreachDate
+            ? `Cruce estimado: ${formatLongDate(metrics.projectedBreachDate)}`
+            : "Al ritmo actual no cruzas el limite"
+        }
+        footerSub="Dentro del periodo fiscal evaluado"
+        variant={hasBreachProjection ? "warning" : "success"}
+      />
+
+      <CardModified
+        title={formatLongDate(nextMilestone.date)}
+        description="Proximo vencimiento"
         action={
           <Badge variant="outline">
-            {formatPercent(metrics.annualUsage)} del limite
+            <CalendarClockIcon />
+            {nextMilestone.kind === "tax" ? "Cuota" : "Recateg."}
           </Badge>
         }
-        footerMain={`Limite cat. ${category.key}: ${formatARS(category.annualLimit)}`}
-        footerSub={formatFiscalPeriodRange(metrics.evaluationPeriod)}
-        variant={
-          metrics.annualUsage >= category.warningAt ? "warning" : "default"
-        }
-      />
-
-      <CardModified
-        title={category.key}
-        description="Categoría actual"
-        action={
-          <Badge variant="outline">
-            {metrics.evaluationPeriod.mode === "filing-window"
-              ? "Tramite"
-              : "Preventivo"}
-          </Badge>
-        }
-        footerMain={`Recategorizacion: ${metrics.evaluationPeriod.recategorizationLabel}`}
-        footerSub={`Limite anual ${formatARS(category.annualLimit)}`}
+        footerMain={nextMilestone.label}
+        footerSub={metrics.evaluationPeriod.recategorizationLabel}
       />
     </div>
   )
+}
+
+function getNextFiscalMilestone(metrics: FinancialMetrics) {
+  const nextTaxDueDate = getNextMonotributoDueDate()
+  const recategorizationDate = metrics.evaluationPeriod.isFilingWindow
+    ? metrics.evaluationPeriod.filingEndDate
+    : metrics.evaluationPeriod.filingStartDate
+
+  if (nextTaxDueDate <= recategorizationDate) {
+    return {
+      date: nextTaxDueDate,
+      kind: "tax" as const,
+      label: "Cuota mensual de monotributo",
+    }
+  }
+
+  return {
+    date: recategorizationDate,
+    kind: "recategorization" as const,
+    label: metrics.evaluationPeriod.isFilingWindow
+      ? "Cierre de ventana de recategorizacion"
+      : "Inicio de ventana de recategorizacion",
+  }
 }

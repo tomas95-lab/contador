@@ -3,6 +3,7 @@ import {
   sumPayments,
   type FinancialMetrics,
 } from "@/lib/accounting"
+import { backendApiPath, getBackendAuthHeaders } from "@/lib/backend-api"
 import type { IncomePayment } from "@/types/accounting"
 
 export type ArcaAnnualSummary = {
@@ -21,6 +22,7 @@ export type ArcaAnnualSummary = {
     count: number
     lastAuthorizedNumber: number
     queried: number
+    truncated?: boolean
     invoices: {
       number: number
       date: string | null
@@ -35,6 +37,10 @@ export type ArcaAnnualSummary = {
 }
 
 export type ArcaHistoricalInvoices = {
+  pagination: {
+    limit?: number
+    offset?: number
+  }
   queriedPoints: {
     wsfe: number[]
     wsfex: number[]
@@ -76,11 +82,18 @@ export type ArcaInvoiceEmissionPayload = {
   amount: number
   description: string
   invoiceType: "C" | "E"
+  currencyId?: "DOL" | "PES"
+  exchangeRate?: number
   clientCuit?: string
   clientName?: string
   clientAddress?: string
   clientTaxId?: string
   destinationCountryCode?: number
+  foreignClientCountryCode?: string
+  foreignClientTaxId?: string
+  foreignClientName?: string
+  foreignClientAddress?: string
+  foreignClientPlatform?: string
   receiverIvaConditionId?: number
   serviceFrom?: string
   serviceTo?: string
@@ -151,32 +164,31 @@ export type ArcaAssistantContext = {
   notes: string[]
 }
 
-const arcaApiUrl =
-  (import.meta.env.VITE_ARCA_API_URL as string | undefined) ??
-  "http://localhost:3001"
-
 export async function fetchArcaAnnualSummary(year = new Date().getFullYear()) {
-  const url = new URL("/api/invoices/arca/annual-summary", arcaApiUrl)
+  const url = backendApiPath("/api/invoices/arca/annual-summary")
   url.searchParams.set("year", String(year))
+  const headers = await getArcaAuthHeaders()
 
-  const response = await fetch(url)
+  const response = await fetch(url, {
+    headers,
+  })
 
   if (!response.ok) {
-    const details = (await response.json().catch(() => null)) as {
-      error?: string
-    } | null
+    const details = await parseArcaError(response)
 
-    throw new Error(details?.error ?? "No se pudo consultar ARCA.")
+    throw new Error(details ?? "No se pudo consultar ARCA.")
   }
 
   return (await response.json()) as ArcaAnnualSummary
 }
 
 export async function emitArcaInvoice(payload: ArcaInvoiceEmissionPayload) {
-  const url = new URL("/api/invoices/emit", arcaApiUrl)
+  const url = backendApiPath("/api/invoices/emit")
+  const authHeaders = await getArcaAuthHeaders()
   const response = await fetch(url, {
     body: JSON.stringify(payload),
     headers: {
+      ...authHeaders,
       "Content-Type": "application/json",
     },
     method: "POST",
@@ -192,24 +204,35 @@ export async function emitArcaInvoice(payload: ArcaInvoiceEmissionPayload) {
 }
 
 export async function fetchArcaHistoricalInvoices({
+  limit,
+  offset,
   wsfe = parsePointList(import.meta.env.VITE_ARCA_WSFE_POINTS, [4]),
   wsfex = parsePointList(import.meta.env.VITE_ARCA_WSFEX_POINTS, [3]),
 }: {
+  limit?: number
+  offset?: number
   wsfe?: number[]
   wsfex?: number[]
 } = {}) {
-  const url = new URL("/api/invoices/arca/historical", arcaApiUrl)
+  const url = backendApiPath("/api/invoices/arca/historical")
   url.searchParams.set("wsfe", wsfe.join(","))
   url.searchParams.set("wsfex", wsfex.join(","))
+  if (limit) {
+    url.searchParams.set("limit", String(limit))
+  }
+  if (offset) {
+    url.searchParams.set("offset", String(offset))
+  }
+  const headers = await getArcaAuthHeaders()
 
-  const response = await fetch(url)
+  const response = await fetch(url, {
+    headers,
+  })
 
   if (!response.ok) {
-    const details = (await response.json().catch(() => null)) as {
-      error?: string
-    } | null
+    const details = await parseArcaError(response)
 
-    throw new Error(details?.error ?? "No se pudo consultar ARCA.")
+    throw new Error(details ?? "No se pudo consultar ARCA.")
   }
 
   return (await response.json()) as ArcaHistoricalInvoices
@@ -296,14 +319,29 @@ export async function fetchArcaAssistantContext({
 async function parseArcaError(response: Response) {
   const details = (await response.json().catch(() => null)) as {
     error?: string
+    explanation?: string
+    action?: string
+    severity?: "warning" | "error" | "critical"
     errors?: { message?: string }[]
   } | null
+
+  if (details?.explanation && details.action) {
+    return [
+      details.error ?? "ARCA rechazó la operación",
+      details.explanation,
+      `Qué hacer: ${details.action}`,
+    ].join("\n\n")
+  }
 
   return (
     details?.error ??
     details?.errors?.find((error) => Boolean(error.message))?.message ??
     response.statusText
   )
+}
+
+async function getArcaAuthHeaders() {
+  return getBackendAuthHeaders()
 }
 
 function parsePointList(value: string | undefined, fallback: number[]) {

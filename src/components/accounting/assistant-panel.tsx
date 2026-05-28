@@ -33,11 +33,16 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { fetchArcaAssistantContext } from "@/lib/arca-api"
-import { requestAssistantReply } from "@/lib/ai-assistant"
+import {
+  buildRiskSnapshot,
+  requestAssistantReply,
+  type RiskSnapshot,
+} from "@/lib/ai-assistant"
 import {
   formatARS,
   formatPaymentDate,
   getFinancialMetrics,
+  getProactiveAlerts,
 } from "@/lib/accounting"
 import { cn } from "@/lib/utils"
 import type {
@@ -84,6 +89,8 @@ const ivaConditionOptions = [
   { label: "Consumidor final", value: "5" },
 ]
 
+const assistantIntroStorageKey = "contable-assistant-intro-shown"
+
 export function AssistantPanel({
   payments,
   category,
@@ -109,7 +116,36 @@ export function AssistantPanel({
   const [isIssuingInvoice, setIsIssuingInvoice] = React.useState(false)
   const [isQueryingArca, setIsQueryingArca] = React.useState(false)
   const [isPending, setIsPending] = React.useState(false)
-  const metrics = getFinancialMetrics(payments, category)
+  const metrics = React.useMemo(
+    () => getFinancialMetrics(payments, category),
+    [category, payments]
+  )
+  const alerts = React.useMemo(
+    () => getProactiveAlerts({ category, payments, profile }),
+    [category, payments, profile]
+  )
+  const riskSnapshot = React.useMemo(
+    () => buildRiskSnapshot(metrics, alerts),
+    [alerts, metrics]
+  )
+  const suggestedQuestions = getSuggestedQuestions(riskSnapshot.riskLevel)
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") {
+      return
+    }
+
+    if (window.sessionStorage.getItem(assistantIntroStorageKey)) {
+      return
+    }
+
+    window.sessionStorage.setItem(assistantIntroStorageKey, "true")
+
+    void onAddMessage({
+      content: buildInitialAssistantMessage(riskSnapshot),
+      role: "assistant",
+    })
+  }, [onAddMessage, riskSnapshot])
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -202,6 +238,7 @@ export function AssistantPanel({
         metrics,
         messages: [...messages, userMessage],
         profile,
+        riskSnapshot,
       })
 
       await onAddMessage({
@@ -437,33 +474,93 @@ export function AssistantPanel({
           </div>
         </CardContent>
         <CardFooter className="shrink-0 border-t bg-background p-4">
-          <form className="flex w-full gap-2" onSubmit={handleSubmit}>
-            <Textarea
-              className="min-h-10 flex-1"
-              placeholder="Preguntar o pedir: facturá el cobro de Cuatro Cafe"
-              value={content}
-              onChange={(event) => setContent(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault()
-                  event.currentTarget.form?.requestSubmit()
-                }
-              }}
-            />
-            <Button
-              className="self-end"
-              disabled={!content.trim() || isPending}
-              size="icon"
-              type="submit"
-            >
-              <SendIcon />
-              <span className="sr-only">Enviar</span>
-            </Button>
-          </form>
+          <div className="flex w-full flex-col gap-3">
+            <div className="flex flex-wrap gap-2">
+              {suggestedQuestions.map((question) => (
+                <Button
+                  key={question}
+                  disabled={isPending}
+                  onClick={() => setContent(question)}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  {question}
+                </Button>
+              ))}
+            </div>
+            <form className="flex w-full gap-2" onSubmit={handleSubmit}>
+              <Textarea
+                className="min-h-10 flex-1"
+                placeholder="Preguntar o pedir: facturá el cobro de Cuatro Cafe"
+                value={content}
+                onChange={(event) => setContent(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault()
+                    event.currentTarget.form?.requestSubmit()
+                  }
+                }}
+              />
+              <Button
+                className="self-end"
+                disabled={!content.trim() || isPending}
+                size="icon"
+                type="submit"
+              >
+                <SendIcon />
+                <span className="sr-only">Enviar</span>
+              </Button>
+            </form>
+          </div>
         </CardFooter>
       </Card>
     </div>
   )
+}
+
+function buildInitialAssistantMessage(riskSnapshot: RiskSnapshot) {
+  if (
+    riskSnapshot.riskLevel === "ALTO" ||
+    riskSnapshot.riskLevel === "CRÍTICO"
+  ) {
+    const riskSummary =
+      riskSnapshot.daysUntilBreach !== null
+        ? `estás en riesgo ${riskSnapshot.riskLevel} y, si seguís igual, podrías cruzar el límite en ${riskSnapshot.daysUntilBreach} días`
+        : `estás en riesgo ${riskSnapshot.riskLevel} y ya usaste ${riskSnapshot.categoryUsagePercent}% del límite de tu categoría`
+
+    return `⚠️ Antes de que me preguntes algo, tengo que avisarte: ${riskSummary}. ¿Querés que te explique qué hacer?`
+  }
+
+  if (riskSnapshot.riskLevel === "MEDIO") {
+    return "Hola. Tu monotributo está en orden por ahora, aunque hay algunas cosas para seguir de cerca. ¿Querés un resumen de tu situación?"
+  }
+
+  return "Hola. Todo en orden con tu monotributo. ¿En qué te puedo ayudar?"
+}
+
+function getSuggestedQuestions(riskLevel: RiskSnapshot["riskLevel"]) {
+  if (riskLevel === "ALTO" || riskLevel === "CRÍTICO") {
+    return [
+      "¿Qué hago si me paso del límite?",
+      "¿Cómo evito la exclusión del monotributo?",
+      "¿Qué es la recategorización de oficio?",
+    ]
+  }
+
+  if (riskLevel === "MEDIO") {
+    return [
+      "¿Estoy cerca de pasarme de categoría?",
+      "¿Qué pasa si me paso del límite?",
+      "¿Cuánto me falta para recategorizar?",
+    ]
+  }
+
+  return [
+    "¿Cuánto puedo facturar este mes sin riesgo?",
+    "¿Cuándo es mi próxima recategorización?",
+    "¿Cómo funciona la Factura E?",
+  ]
 }
 
 function PreparedInvoiceCard({

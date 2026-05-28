@@ -1,4 +1,3 @@
-import fs from "node:fs"
 import path from "node:path"
 
 import dotenv from "dotenv"
@@ -50,13 +49,6 @@ function resolvePath(value: string): string {
   return path.isAbsolute(value) ? value : path.resolve(process.cwd(), value)
 }
 
-function firstExistingPath(candidates: string[]): string {
-  const existing = candidates.find((candidate) =>
-    fs.existsSync(resolvePath(candidate))
-  )
-  return existing ?? candidates[0]
-}
-
 const environment = parseEnvironment(process.env.ARCA_ENV)
 
 const homologacion = {
@@ -88,25 +80,17 @@ export const config = {
   corsOrigin: process.env.CORS_ORIGIN,
   arca: {
     environment,
-    cuit: process.env.ARCA_CUIT?.replace(/\D/g, "") ?? "20464403524",
-    certificatePath: resolvePath(
-      process.env.ARCA_CERT_PATH ??
-        firstExistingPath([
-          "../contable-app_1f484272f348b071.crt",
-          "../certificate.crt",
-          "./certs/certificate.crt",
-        ])
-    ),
-    privateKeyPath: resolvePath(
-      process.env.ARCA_PRIVATE_KEY_PATH ??
-        firstExistingPath(["../private.key", "./certs/private.key"])
-    ),
-    privateKeyPassphrase: process.env.ARCA_PRIVATE_KEY_PASSPHRASE,
     cmsDigest: (process.env.ARCA_CMS_DIGEST ?? "sha256").toLowerCase(),
     cacheDir: resolvePath(process.env.ARCA_CACHE_DIR ?? ".arca-cache"),
     endpoints: environment === "production" ? production : homologacion,
-    wsfePointOfSale: intFromEnv("ARCA_WSFE_PTO_VTA", 1),
-    wsfexPointOfSale: intFromEnv("ARCA_WSFEX_PTO_VTA", 1),
+    requestTimeoutMs: intFromEnv("ARCA_REQUEST_TIMEOUT_MS", 15000),
+    historical: {
+      pageSize: intFromEnv("ARCA_HISTORICAL_PAGE_SIZE", 100),
+      maxInvoicesPerQuery: intFromEnv(
+        "ARCA_HISTORICAL_MAX_INVOICES_PER_QUERY",
+        500
+      ),
+    },
     defaultReceiverIvaConditionId: intFromEnv(
       "ARCA_DEFAULT_CONDICION_IVA_RECEPTOR_ID",
       5

@@ -5,6 +5,7 @@ import forge from "node-forge"
 import { XMLParser } from "fast-xml-parser"
 
 import { config } from "../config.js"
+import type { UserArcaCredentials } from "../lib/arca-credentials.js"
 import { isoDateTime } from "./date.js"
 import { ArcaError } from "./errors.js"
 import { record } from "./objects.js"
@@ -24,9 +25,8 @@ interface SigningMaterial {
   privateKey: forge.pki.rsa.PrivateKey
 }
 
-let signingMaterial: SigningMaterial | undefined
-const inMemoryTickets = new Map<ArcaServiceId, AccessTicket>()
-const pendingTickets = new Map<ArcaServiceId, Promise<AccessTicket>>()
+const inMemoryTickets = new Map<string, AccessTicket>()
+const pendingTickets = new Map<string, Promise<AccessTicket>>()
 
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
@@ -34,10 +34,20 @@ const xmlParser = new XMLParser({
   trimValues: true,
 })
 
-function ticketCachePath(service: ArcaServiceId): string {
+function ticketCacheKey(
+  credentials: UserArcaCredentials,
+  service: ArcaServiceId
+) {
+  return `${credentials.userId}:${credentials.cuit}:${service}`
+}
+
+function ticketCachePath(
+  credentials: UserArcaCredentials,
+  service: ArcaServiceId
+): string {
   return path.join(
     config.arca.cacheDir,
-    `ta-${config.arca.environment}-${service}.json`
+    `ta-${config.arca.environment}-${credentials.userId}-${credentials.cuit}-${service}.json`
   )
 }
 
@@ -46,18 +56,22 @@ function isUsableTicket(ticket: AccessTicket): boolean {
   return Number.isFinite(expiresAt) && expiresAt - Date.now() > 5 * 60 * 1000
 }
 
-function readCachedTicket(service: ArcaServiceId): AccessTicket | undefined {
-  const memoryTicket = inMemoryTickets.get(service)
+function readCachedTicket(
+  credentials: UserArcaCredentials,
+  service: ArcaServiceId
+): AccessTicket | undefined {
+  const cacheKey = ticketCacheKey(credentials, service)
+  const memoryTicket = inMemoryTickets.get(cacheKey)
   if (memoryTicket && isUsableTicket(memoryTicket)) {
     return memoryTicket
   }
 
   try {
-    const raw = fs.readFileSync(ticketCachePath(service), "utf8")
+    const raw = fs.readFileSync(ticketCachePath(credentials, service), "utf8")
     const ticket = JSON.parse(raw) as AccessTicket
 
     if (ticket.token && ticket.sign && isUsableTicket(ticket)) {
-      inMemoryTickets.set(service, ticket)
+      inMemoryTickets.set(cacheKey, ticket)
       return ticket
     }
   } catch {
@@ -67,56 +81,44 @@ function readCachedTicket(service: ArcaServiceId): AccessTicket | undefined {
   return undefined
 }
 
-function writeCachedTicket(service: ArcaServiceId, ticket: AccessTicket): void {
-  inMemoryTickets.set(service, ticket)
+function writeCachedTicket(
+  credentials: UserArcaCredentials,
+  service: ArcaServiceId,
+  ticket: AccessTicket
+): void {
+  inMemoryTickets.set(ticketCacheKey(credentials, service), ticket)
 
   try {
     fs.mkdirSync(config.arca.cacheDir, { recursive: true })
-    fs.writeFileSync(ticketCachePath(service), JSON.stringify(ticket, null, 2))
+    fs.writeFileSync(
+      ticketCachePath(credentials, service),
+      JSON.stringify(ticket, null, 2)
+    )
   } catch {
     // The TA is still valid in memory; disk cache is a restart convenience.
   }
 }
 
-function getSigningMaterial(): SigningMaterial {
-  if (signingMaterial) {
-    return signingMaterial
-  }
-
-  const certPem = fs.readFileSync(config.arca.certificatePath, "utf8")
-  const keyPem = fs.readFileSync(config.arca.privateKeyPath, "utf8")
-
-  const certificate = forge.pki.certificateFromPem(certPem)
+function getSigningMaterial(credentials: UserArcaCredentials): SigningMaterial {
+  const certificate = forge.pki.certificateFromPem(credentials.certificate)
   let privateKey: forge.pki.rsa.PrivateKey | null = null
 
   try {
-    privateKey = forge.pki.privateKeyFromPem(keyPem) as forge.pki.rsa.PrivateKey
+    privateKey = forge.pki.privateKeyFromPem(
+      credentials.privateKey
+    ) as forge.pki.rsa.PrivateKey
   } catch {
-    if (!config.arca.privateKeyPassphrase) {
-      throw new ArcaError(
-        "Could not read ARCA private key. If it is encrypted, set ARCA_PRIVATE_KEY_PASSPHRASE.",
-        500
-      )
-    }
-
-    const encryptedInfo = forge.pki.encryptedPrivateKeyFromPem(keyPem)
-    const decryptedInfo = forge.pki.decryptPrivateKeyInfo(
-      encryptedInfo,
-      config.arca.privateKeyPassphrase
+    throw new ArcaError(
+      "Could not read ARCA private key. Store an unencrypted private key in user_arca_credentials.",
+      500
     )
-    privateKey = decryptedInfo
-      ? (forge.pki.privateKeyFromAsn1(
-          decryptedInfo
-        ) as forge.pki.rsa.PrivateKey)
-      : null
   }
 
   if (!privateKey) {
     throw new ArcaError("Could not decrypt ARCA private key.", 500)
   }
 
-  signingMaterial = { certificate, privateKey }
-  return signingMaterial
+  return { certificate, privateKey }
 }
 
 function digestOid(): string {
@@ -146,8 +148,11 @@ function buildLoginTicketRequest(service: ArcaServiceId): string {
   ].join("")
 }
 
-function signCms(loginTicketRequest: string): string {
-  const { certificate, privateKey } = getSigningMaterial()
+function signCms(
+  credentials: UserArcaCredentials,
+  loginTicketRequest: string
+): string {
+  const { certificate, privateKey } = getSigningMaterial(credentials)
   const p7 = forge.pkcs7.createSignedData()
 
   p7.content = forge.util.createBuffer(loginTicketRequest, "utf8")
@@ -199,9 +204,12 @@ function parseAccessTicket(xml: string): AccessTicket {
   }
 }
 
-async function requestNewTicket(service: ArcaServiceId): Promise<AccessTicket> {
+async function requestNewTicket(
+  credentials: UserArcaCredentials,
+  service: ArcaServiceId
+): Promise<AccessTicket> {
   const loginTicketRequest = buildLoginTicketRequest(service)
-  const cms = signCms(loginTicketRequest)
+  const cms = signCms(credentials, loginTicketRequest)
   const client = await getSoapClient(config.arca.endpoints.wsaaUrl)
   const [result] = await client
     .loginCmsAsync({ in0: cms })
@@ -215,7 +223,7 @@ async function requestNewTicket(service: ArcaServiceId): Promise<AccessTicket> {
   }
 
   const ticket = parseAccessTicket(responseXml)
-  writeCachedTicket(service, ticket)
+  writeCachedTicket(credentials, service, ticket)
   return ticket
 }
 
@@ -239,22 +247,24 @@ function asWsaaError(error: unknown, service: ArcaServiceId): ArcaError {
 }
 
 export async function getAccessTicket(
+  credentials: UserArcaCredentials,
   service: ArcaServiceId
 ): Promise<AccessTicket> {
-  const cachedTicket = readCachedTicket(service)
+  const cachedTicket = readCachedTicket(credentials, service)
   if (cachedTicket) {
     return cachedTicket
   }
 
-  const pending = pendingTickets.get(service)
+  const cacheKey = ticketCacheKey(credentials, service)
+  const pending = pendingTickets.get(cacheKey)
   if (pending) {
     return pending
   }
 
-  const nextTicket = requestNewTicket(service).finally(() => {
-    pendingTickets.delete(service)
+  const nextTicket = requestNewTicket(credentials, service).finally(() => {
+    pendingTickets.delete(cacheKey)
   })
 
-  pendingTickets.set(service, nextTicket)
+  pendingTickets.set(cacheKey, nextTicket)
   return nextTicket
 }

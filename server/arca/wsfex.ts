@@ -1,8 +1,10 @@
 import { config } from "../config.js"
+import type { UserArcaCredentials } from "../lib/arca-credentials.js"
 import { fromArcaDate, roundMoney, toArcaDate } from "./date.js"
 import { ArcaError, nonZeroCode } from "./errors.js"
 import { record } from "./objects.js"
 import { getSoapClient } from "./soap.js"
+import { withArcaRequestTimeout } from "./timeout.js"
 import { getAccessTicket } from "./wsaa.js"
 
 const FACTURA_E = 19
@@ -11,11 +13,19 @@ const TIPO_EXPORTACION_SERVICIOS = 2
 export interface WsfexInvoiceInput {
   amount: number
   description: string
+  currencyId?: "DOL" | "PES" | string
+  exchangeRate?: number
   clientCuit?: string
   clientName?: string
   clientAddress?: string
   clientTaxId?: string
   destinationCountryCode?: number
+  foreignClientData?: {
+    countryCode: string
+    taxId?: string
+    name: string
+    address?: string
+  }
   serviceFrom?: string
   serviceTo?: string
   dueDate?: string
@@ -58,6 +68,7 @@ export interface WsfexAnnualSummary {
   count: number
   lastAuthorizedNumber: number
   queried: number
+  truncated: boolean
   invoices: WsfexInvoiceSummaryItem[]
 }
 
@@ -73,6 +84,11 @@ export interface WsfexHistoricalSummary {
   invoices: WsfexInvoiceSummaryItem[]
 }
 
+export type WsfexHistoricalQueryOptions = {
+  limit?: number
+  offset?: number
+}
+
 interface WsfexSoapClient {
   FEXGetLast_IDAsync(args: unknown): Promise<[unknown]>
   FEXGetLast_CMPAsync(args: unknown): Promise<[unknown]>
@@ -86,11 +102,15 @@ interface ArcaAuth {
   Cuit: number
 }
 
-function auth(token: string, sign: string): ArcaAuth {
+function auth(
+  credentials: UserArcaCredentials,
+  token: string,
+  sign: string
+): ArcaAuth {
   return {
     Token: token,
     Sign: sign,
-    Cuit: Number(config.arca.cuit),
+    Cuit: Number(credentials.cuit),
   }
 }
 
@@ -107,7 +127,10 @@ async function getNextRequestId(
   client: WsfexSoapClient,
   authData: ArcaAuth
 ): Promise<number> {
-  const [response] = await client.FEXGetLast_IDAsync({ Auth: authData })
+  const [response] = await withArcaRequestTimeout(
+    "FEXGetLast_ID",
+    client.FEXGetLast_IDAsync({ Auth: authData })
+  )
   const result = record(response).FEXGetLast_IDResult
   ensureNoFexError(result, "FEXGetLast_ID")
 
@@ -116,23 +139,29 @@ async function getNextRequestId(
 
 async function getNextInvoiceNumber(
   client: WsfexSoapClient,
-  authData: ArcaAuth
+  authData: ArcaAuth,
+  pointOfSale: number
 ): Promise<number> {
-  return (await getLastAuthorizedInvoiceNumber(client, authData)) + 1
+  return (
+    (await getLastAuthorizedInvoiceNumber(client, authData, pointOfSale)) + 1
+  )
 }
 
 async function getLastAuthorizedInvoiceNumber(
   client: WsfexSoapClient,
   authData: ArcaAuth,
-  pointOfSale = config.arca.wsfexPointOfSale
+  pointOfSale: number
 ): Promise<number> {
-  const [response] = await client.FEXGetLast_CMPAsync({
-    Auth: {
-      ...authData,
-      Pto_venta: pointOfSale,
-      Cbte_Tipo: FACTURA_E,
-    },
-  })
+  const [response] = await withArcaRequestTimeout(
+    "FEXGetLast_CMP",
+    client.FEXGetLast_CMPAsync({
+      Auth: {
+        ...authData,
+        Pto_venta: pointOfSale,
+        Cbte_Tipo: FACTURA_E,
+      },
+    })
+  )
 
   const result = record(response).FEXGetLast_CMPResult
   ensureNoFexError(result, "FEXGetLast_CMP")
@@ -141,7 +170,9 @@ async function getLastAuthorizedInvoiceNumber(
 }
 
 function buildExportClient(input: WsfexInvoiceInput) {
+  const foreignClient = input.foreignClientData
   const destinationCountryCode =
+    parseCountryCode(foreignClient?.countryCode) ??
     input.destinationCountryCode ??
     config.arca.exportDefaults.destinationCountryCode
 
@@ -156,50 +187,54 @@ function buildExportClient(input: WsfexInvoiceInput) {
     input.clientCuit?.replace(/\D/g, "") ??
     config.arca.exportDefaults.clientCountryCuit
   const clientTaxId =
-    input.clientTaxId ?? config.arca.exportDefaults.clientTaxId
-
-  if (!clientCountryCuit && !clientTaxId) {
-    throw new ArcaError(
-      "Factura E requires clientCuit, ARCA_EXPORT_CLIENT_COUNTRY_CUIT, clientTaxId, or ARCA_EXPORT_CLIENT_TAX_ID.",
-      400
-    )
-  }
+    foreignClient?.taxId ??
+    input.clientTaxId ??
+    config.arca.exportDefaults.clientTaxId ??
+    "NO_DECLARADO"
 
   return {
     destinationCountryCode,
     clientCountryCuit,
     clientTaxId,
-    clientName: input.clientName ?? config.arca.exportDefaults.clientName,
+    clientName:
+      foreignClient?.name ??
+      input.clientName ??
+      config.arca.exportDefaults.clientName,
     clientAddress:
-      input.clientAddress ?? config.arca.exportDefaults.clientAddress,
+      foreignClient?.address ??
+      input.clientAddress ??
+      config.arca.exportDefaults.clientAddress,
   }
 }
 
 export async function getFacturaEAnnualSummary(
+  credentials: UserArcaCredentials,
   year = new Date().getFullYear()
 ): Promise<WsfexAnnualSummary> {
-  const ticket = await getAccessTicket("wsfex")
+  const ticket = await getAccessTicket(credentials, "wsfex")
   const client = (await getSoapClient(
     config.arca.endpoints.wsfexUrl
   )) as unknown as WsfexSoapClient
-  const authData = auth(ticket.token, ticket.sign)
+  const authData = auth(credentials, ticket.token, ticket.sign)
+  const pointOfSale = credentials.wsfexPointOfSale
   const lastAuthorizedNumber = await getLastAuthorizedInvoiceNumber(
     client,
     authData,
-    config.arca.wsfexPointOfSale
+    pointOfSale
   )
   const invoices: WsfexInvoiceSummaryItem[] = []
   const startDate = `${year}-01-01`
   const endDate = `${year}-12-31`
+  const maxQueried = Math.max(1, config.arca.historical.maxInvoicesPerQuery)
   let queried = 0
+  let reachedPeriodStart = false
 
-  for (let number = lastAuthorizedNumber; number >= 1; number -= 1) {
-    const invoice = await consultFacturaE(
-      client,
-      authData,
-      config.arca.wsfexPointOfSale,
-      number
-    )
+  for (
+    let number = lastAuthorizedNumber;
+    number >= 1 && queried < maxQueried;
+    number -= 1
+  ) {
+    const invoice = await consultFacturaE(client, authData, pointOfSale, number)
     queried += 1
 
     if (!invoice.date) {
@@ -212,6 +247,7 @@ export async function getFacturaEAnnualSummary(
     }
 
     if (invoice.date < startDate) {
+      reachedPeriodStart = true
       break
     }
   }
@@ -222,7 +258,7 @@ export async function getFacturaEAnnualSummary(
     source: "wsfex",
     invoiceType: "E",
     invoiceTypeCode: FACTURA_E,
-    pointOfSale: config.arca.wsfexPointOfSale,
+    pointOfSale,
     year,
     total: roundMoney(
       invoices.reduce((total, invoice) => total + invoice.amountArs, 0)
@@ -230,26 +266,36 @@ export async function getFacturaEAnnualSummary(
     count: invoices.length,
     lastAuthorizedNumber,
     queried,
+    truncated:
+      !reachedPeriodStart &&
+      lastAuthorizedNumber > queried &&
+      queried >= maxQueried,
     invoices,
   }
 }
 
 export async function getFacturaEHistoricalSummary(
-  pointOfSale: number
+  credentials: UserArcaCredentials,
+  pointOfSale: number,
+  options: WsfexHistoricalQueryOptions = {}
 ): Promise<WsfexHistoricalSummary> {
-  const ticket = await getAccessTicket("wsfex")
+  const ticket = await getAccessTicket(credentials, "wsfex")
   const client = (await getSoapClient(
     config.arca.endpoints.wsfexUrl
   )) as unknown as WsfexSoapClient
-  const authData = auth(ticket.token, ticket.sign)
+  const authData = auth(credentials, ticket.token, ticket.sign)
   const lastAuthorizedNumber = await getLastAuthorizedInvoiceNumber(
     client,
     authData,
     pointOfSale
   )
+  const { fromNumber, toNumber } = getHistoricalWindow(
+    lastAuthorizedNumber,
+    options
+  )
   const invoices: WsfexInvoiceSummaryItem[] = []
 
-  for (let number = 1; number <= lastAuthorizedNumber; number += 1) {
+  for (let number = fromNumber; number <= toNumber; number += 1) {
     invoices.push(await consultFacturaE(client, authData, pointOfSale, number))
   }
 
@@ -263,7 +309,7 @@ export async function getFacturaEHistoricalSummary(
     ),
     count: invoices.length,
     lastAuthorizedNumber,
-    queried: lastAuthorizedNumber,
+    queried: invoices.length,
     invoices,
   }
 }
@@ -274,14 +320,17 @@ async function consultFacturaE(
   pointOfSale: number,
   number: number
 ): Promise<WsfexInvoiceSummaryItem> {
-  const [response] = await client.FEXGetCMPAsync({
-    Auth: authData,
-    Cmp: {
-      Cbte_Tipo: FACTURA_E,
-      Punto_vta: pointOfSale,
-      Cbte_nro: number,
-    },
-  })
+  const [response] = await withArcaRequestTimeout(
+    "FEXGetCMP",
+    client.FEXGetCMPAsync({
+      Auth: authData,
+      Cmp: {
+        Cbte_Tipo: FACTURA_E,
+        Punto_vta: pointOfSale,
+        Cbte_nro: number,
+      },
+    })
+  )
   const result = record(response).FEXGetCMPResult
   ensureNoFexError(result, "FEXGetCMP")
 
@@ -306,34 +355,50 @@ async function consultFacturaE(
 }
 
 export async function emitFacturaE(
+  credentials: UserArcaCredentials,
   input: WsfexInvoiceInput
 ): Promise<EmittedWsfexInvoice> {
   const amount = roundMoney(input.amount)
+  const currencyId = normalizeCurrencyId(input.currencyId)
+  const exchangeRate =
+    currencyId === "DOL" ? Number(input.exchangeRate ?? 0) : 1
+
+  if (
+    currencyId === "DOL" &&
+    (!Number.isFinite(exchangeRate) || exchangeRate <= 0)
+  ) {
+    throw new ArcaError(
+      "Factura E en USD requiere un tipo de cambio positivo.",
+      400
+    )
+  }
+
   const today = toArcaDate()
   const exportClient = buildExportClient(input)
-  const ticket = await getAccessTicket("wsfex")
+  const ticket = await getAccessTicket(credentials, "wsfex")
   const client = (await getSoapClient(
     config.arca.endpoints.wsfexUrl
   )) as unknown as WsfexSoapClient
-  const authData = auth(ticket.token, ticket.sign)
+  const authData = auth(credentials, ticket.token, ticket.sign)
+  const pointOfSale = credentials.wsfexPointOfSale
   const [requestId, invoiceNumber] = await Promise.all([
     getNextRequestId(client, authData),
-    getNextInvoiceNumber(client, authData),
+    getNextInvoiceNumber(client, authData, pointOfSale),
   ])
 
   const cmp: Record<string, unknown> = {
     Id: requestId,
     Fecha_cbte: today,
     Cbte_Tipo: FACTURA_E,
-    Punto_vta: config.arca.wsfexPointOfSale,
+    Punto_vta: pointOfSale,
     Cbte_nro: invoiceNumber,
     Tipo_expo: TIPO_EXPORTACION_SERVICIOS,
     Permiso_existente: "",
     Dst_cmp: exportClient.destinationCountryCode,
     Cliente: exportClient.clientName,
     Domicilio_cliente: exportClient.clientAddress,
-    Moneda_Id: "PES",
-    Moneda_ctz: 1,
+    Moneda_Id: currencyId,
+    Moneda_ctz: currencyId === "DOL" ? exchangeRate : 1,
     Obs_comerciales: input.description,
     Imp_total: amount,
     Forma_pago: "Transferencia",
@@ -360,10 +425,13 @@ export async function emitFacturaE(
     cmp.ID_impositivo = exportClient.clientTaxId
   }
 
-  const [response] = await client.FEXAuthorizeAsync({
-    Auth: authData,
-    Cmp: cmp,
-  })
+  const [response] = await withArcaRequestTimeout(
+    "FEXAuthorize",
+    client.FEXAuthorizeAsync({
+      Auth: authData,
+      Cmp: cmp,
+    })
+  )
 
   const result = record(response).FEXAuthorizeResult
   ensureNoFexError(result, "FEXAuthorize")
@@ -384,7 +452,7 @@ export async function emitFacturaE(
     invoice: {
       invoiceType: "E",
       invoiceTypeCode: FACTURA_E,
-      pointOfSale: config.arca.wsfexPointOfSale,
+      pointOfSale,
       number: Number(authResult.Cbte_nro ?? invoiceNumber),
       date: fromArcaDate(String(authResult.Fch_cbte ?? today)),
       amount,
@@ -395,5 +463,44 @@ export async function emitFacturaE(
       error: resultRecord.FEXErr,
       events: resultRecord.FEXEvents,
     },
+  }
+}
+
+function normalizeCurrencyId(value: string | undefined) {
+  return value === "DOL" ? "DOL" : "PES"
+}
+
+function parseCountryCode(value: string | undefined) {
+  if (!value) {
+    return undefined
+  }
+
+  const parsed = Number(value.replace(/\D/g, ""))
+
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
+}
+
+function getHistoricalWindow(
+  lastAuthorizedNumber: number,
+  options: WsfexHistoricalQueryOptions
+) {
+  const offset = Math.max(0, options.offset ?? 0)
+  const requestedLimit = options.limit ?? config.arca.historical.pageSize
+  const limit = Math.min(
+    Math.max(1, requestedLimit),
+    Math.max(1, config.arca.historical.maxInvoicesPerQuery)
+  )
+  const toNumber = lastAuthorizedNumber - offset
+
+  if (toNumber < 1) {
+    return {
+      fromNumber: 1,
+      toNumber: 0,
+    }
+  }
+
+  return {
+    fromNumber: Math.max(1, toNumber - limit + 1),
+    toNumber,
   }
 }
