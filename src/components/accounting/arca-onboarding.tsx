@@ -28,7 +28,7 @@ import {
 } from "@/lib/arca-credentials-api"
 
 type ArcaOnboardingProps = {
-  onComplete: () => void
+  onComplete: (cuit: string) => void
   onSignOut: () => void
 }
 
@@ -127,7 +127,7 @@ export function ArcaOnboarding({ onComplete, onSignOut }: ArcaOnboardingProps) {
         wsfe_pto_vta: Number(wsfePointOfSale),
         wsfex_pto_vta: Number(wsfexPointOfSale),
       })
-      onComplete()
+      onComplete(normalizedCuit)
     } catch (error) {
       setError(errorMessage(error))
     } finally {

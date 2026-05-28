@@ -11,6 +11,7 @@ import {
   XIcon,
 } from "lucide-react"
 
+import { ConfirmationDialog } from "@/components/confirmation-dialog"
 import { FiscalProfileCard } from "@/components/accounting/fiscal-profile-card"
 import { MessageMarkdown } from "@/components/accounting/message-markdown"
 import { Badge } from "@/components/ui/badge"
@@ -82,6 +83,12 @@ type PendingInvoiceDraft = {
   payment: IncomePayment
 }
 
+type InvoiceConfirmation = {
+  invoiceType: "C" | "E"
+  payment: IncomePayment
+  receiver: string
+}
+
 const ivaConditionOptions = [
   { label: "Resp. inscripto", value: "1" },
   { label: "Monotributo", value: "6" },
@@ -112,10 +119,14 @@ export function AssistantPanel({
   const [invoiceIvaCondition, setInvoiceIvaCondition] = React.useState("1")
   const [pendingInvoiceDraft, setPendingInvoiceDraft] =
     React.useState<PendingInvoiceDraft | null>(null)
+  const [invoiceConfirmation, setInvoiceConfirmation] =
+    React.useState<InvoiceConfirmation | null>(null)
   const [isClearing, setIsClearing] = React.useState(false)
   const [isIssuingInvoice, setIsIssuingInvoice] = React.useState(false)
   const [isQueryingArca, setIsQueryingArca] = React.useState(false)
   const [isPending, setIsPending] = React.useState(false)
+  const messagesScrollRef = React.useRef<HTMLDivElement | null>(null)
+  const messagesEndRef = React.useRef<HTMLDivElement | null>(null)
   const metrics = React.useMemo(
     () => getFinancialMetrics(payments, category),
     [category, payments]
@@ -129,6 +140,39 @@ export function AssistantPanel({
     [alerts, metrics]
   )
   const suggestedQuestions = getSuggestedQuestions(riskSnapshot.riskLevel)
+  const scrollMessagesToBottom = React.useCallback(
+    (behavior: ScrollBehavior = "smooth") => {
+      window.requestAnimationFrame(() => {
+        const scrollContainer = messagesScrollRef.current
+
+        if (messagesEndRef.current) {
+          messagesEndRef.current.scrollIntoView({
+            behavior,
+            block: "end",
+          })
+          return
+        }
+
+        if (scrollContainer) {
+          scrollContainer.scrollTop = scrollContainer.scrollHeight
+        }
+      })
+    },
+    []
+  )
+
+  React.useEffect(() => {
+    scrollMessagesToBottom("auto")
+  }, [scrollMessagesToBottom])
+
+  React.useEffect(() => {
+    scrollMessagesToBottom()
+  }, [
+    isPending,
+    messages.length,
+    pendingInvoiceDraft?.id,
+    scrollMessagesToBottom,
+  ])
 
   React.useEffect(() => {
     if (typeof window === "undefined") {
@@ -288,7 +332,6 @@ export function AssistantPanel({
     const clientCuit = invoiceClientCuit.trim()
     const exportClientAddress = invoiceClientAddress.trim()
     const exportClientName = invoiceClientName.trim()
-    const exportClientTaxId = invoiceClientTaxId.trim()
     const destinationCountryCode = Number(invoiceDestinationCountryCode)
 
     if (
@@ -309,16 +352,43 @@ export function AssistantPanel({
       : invoiceType === "E"
         ? `cliente exterior ${exportClientName}`
         : "consumidor final"
-    const confirmed = window.confirm(
-      `Emitir Factura ${invoiceType} real en ARCA por ${formatARS(
-        latestPayment.amount
-      )} para ${latestPayment.client} (${receiver})?`
-    )
 
-    if (!confirmed) {
+    setInvoiceConfirmation({
+      invoiceType,
+      payment: latestPayment,
+      receiver,
+    })
+  }
+
+  async function confirmEmitPreparedInvoice() {
+    if (!invoiceConfirmation || isIssuingInvoice) {
       return
     }
 
+    const latestPayment =
+      payments.find(
+        (payment) => payment.id === invoiceConfirmation.payment.id
+      ) ?? invoiceConfirmation.payment
+    const invoiceType = invoiceConfirmation.invoiceType
+
+    if (latestPayment.invoiceStatus !== "pendiente") {
+      await onAddMessage({
+        role: "assistant",
+        content:
+          "Ese cobro ya no figura como pendiente. No emito nada para evitar duplicar comprobantes.",
+      })
+      setPendingInvoiceDraft(null)
+      setInvoiceConfirmation(null)
+      return
+    }
+
+    const clientCuit = invoiceClientCuit.trim()
+    const exportClientAddress = invoiceClientAddress.trim()
+    const exportClientName = invoiceClientName.trim()
+    const exportClientTaxId = invoiceClientTaxId.trim()
+    const destinationCountryCode = Number(invoiceDestinationCountryCode)
+
+    setInvoiceConfirmation(null)
     setIsIssuingInvoice(true)
     setInvoiceError("")
 
@@ -385,7 +455,10 @@ export function AssistantPanel({
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="min-h-0 flex-1 overflow-y-auto p-4">
+        <CardContent
+          ref={messagesScrollRef}
+          className="min-h-0 flex-1 overflow-y-auto p-4"
+        >
           <div className="space-y-4">
             {messages.map((message) => (
               <div
@@ -471,6 +544,7 @@ export function AssistantPanel({
                 payment={pendingInvoiceDraft.payment}
               />
             ) : null}
+            <div ref={messagesEndRef} aria-hidden="true" />
           </div>
         </CardContent>
         <CardFooter className="shrink-0 border-t bg-background p-4">
@@ -515,6 +589,30 @@ export function AssistantPanel({
           </div>
         </CardFooter>
       </Card>
+      <ConfirmationDialog
+        actionLabel="Confirmar"
+        description={
+          invoiceConfirmation
+            ? `¿Estás seguro que querés emitir la Factura ${
+                invoiceConfirmation.invoiceType
+              } real en ARCA por ${formatARS(
+                invoiceConfirmation.payment.amount
+              )} para ${invoiceConfirmation.payment.client} (${
+                invoiceConfirmation.receiver
+              })?`
+            : "¿Estás seguro que querés emitir esta factura?"
+        }
+        disabled={isIssuingInvoice}
+        onConfirm={() => void confirmEmitPreparedInvoice()}
+        onOpenChange={(open) => {
+          if (!open) {
+            setInvoiceConfirmation(null)
+          }
+        }}
+        open={Boolean(invoiceConfirmation)}
+        severity="default"
+        title="Emitir factura en ARCA"
+      />
     </div>
   )
 }

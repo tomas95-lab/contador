@@ -21,7 +21,6 @@ import {
   ReceiptIcon,
   TrendingUpIcon,
   UsersRoundIcon,
-  PlugZapIcon,
 } from "lucide-react"
 import type { AppSection } from "@/types/accounting"
 
@@ -30,6 +29,7 @@ const navMainItems: {
   title: string
   icon: React.ReactNode
   badgeCount?: number
+  hidden?: boolean
 }[] = [
   {
     id: "resumen",
@@ -60,24 +60,21 @@ const navMainItems: {
     id: "clientes",
     title: "Clientes",
     icon: <UsersRoundIcon />,
-  },
-  {
-    id: "arca",
-    title: "Conectar ARCA",
-    icon: <PlugZapIcon />,
+    // HIDDEN: mostrar cuando esté listo.
+    hidden: true,
   },
 ]
 
 const data = {
   navSecondary: [
     {
+      id: "configuracion" as AppSection,
       title: "Configuración",
-      url: "#",
       icon: <Settings2Icon />,
     },
     {
+      id: "ayuda" as AppSection,
       title: "Ayuda",
-      url: "#",
       icon: <CircleHelpIcon />,
     },
   ],
@@ -105,14 +102,16 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const mainItems = React.useMemo(
     () =>
-      navMainItems.map((item) =>
-        item.id === "resumen"
-          ? {
-              ...item,
-              badgeCount: unreadAlertCount,
-            }
-          : item
-      ),
+      navMainItems
+        .filter((item) => !item.hidden)
+        .map((item) =>
+          item.id === "resumen"
+            ? {
+                ...item,
+                badgeCount: unreadAlertCount,
+              }
+            : item
+        ),
     [unreadAlertCount]
   )
 
@@ -122,13 +121,11 @@ export function AppSidebar({
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
-              asChild
               className="data-[slot=sidebar-menu-button]:p-1.5!"
+              onClick={() => onSectionChange("resumen")}
             >
-              <a href="#">
-                <ReceiptIcon className="size-5!" />
-                <span className="text-base font-semibold">contable.</span>
-              </a>
+              <ReceiptIcon className="size-5!" />
+              <span className="text-base font-semibold">contable.</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
@@ -140,7 +137,12 @@ export function AppSidebar({
           onCreatePayment={() => onSectionChange("cobros")}
           onSelect={onSectionChange}
         />
-        <NavSecondary items={data.navSecondary} className="mt-auto" />
+        <NavSecondary
+          activeItem={activeSection}
+          className="mt-auto"
+          items={data.navSecondary}
+          onSelect={onSectionChange}
+        />
       </SidebarContent>
       <SidebarFooter>
         <NavUser onSignOut={onSignOut} user={user} />

@@ -9,6 +9,7 @@ import {
   ShieldCheckIcon,
 } from "lucide-react"
 
+import { ConfirmationDialog } from "@/components/confirmation-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -71,6 +72,12 @@ type InvoicingPanelProps = {
     }
   ) => Promise<void>
   payments: IncomePayment[]
+}
+
+type InvoiceConfirmation = {
+  description: string
+  invoiceType: "C" | "E"
+  payment: IncomePayment
 }
 
 const ivaConditionOptions = [
@@ -151,6 +158,8 @@ export function InvoicingPanel({
   const [saveClientByPayment, setSaveClientByPayment] = React.useState<
     Record<string, boolean>
   >({})
+  const [invoiceConfirmation, setInvoiceConfirmation] =
+    React.useState<InvoiceConfirmation | null>(null)
   const pendingPayments = payments.filter(
     (payment) => payment.invoiceStatus === "pendiente"
   )
@@ -252,7 +261,7 @@ export function InvoicingPanel({
     const ivaCondition = ivaConditionOptions.find(
       (option) => Number(option.value) === ivaConditionId
     )
-    let confirmed = false
+    let description = ""
 
     if (invoiceType === "C") {
       const receiver = clientCuit
@@ -261,11 +270,9 @@ export function InvoicingPanel({
           }`
         : "consumidor final"
 
-      confirmed = window.confirm(
-        `Emitir Factura C real en ARCA por ${formatARS(
-          payment.amount
-        )} para ${payment.client} (${receiver})?`
-      )
+      description = `¿Estás seguro que querés emitir la Factura C real en ARCA por ${formatARS(
+        payment.amount
+      )} para ${payment.client} (${receiver})?`
     } else {
       const validationError = validateExportInvoice(payment)
 
@@ -278,21 +285,44 @@ export function InvoicingPanel({
       const exchangeRate = getExchangeRate(payment.id)
       const amountArs = getExportAmountArs(payment)
 
-      confirmed = window.confirm(
-        `Emitir Factura E real en ARCA por ${
-          currencyId === "DOL"
-            ? `USD ${formatNumber(payment.amount)} (${formatARS(amountArs)})`
-            : formatARS(payment.amount)
-        } para ${foreignClientNames[payment.id]?.trim()}? Tipo de cambio: ${
-          currencyId === "DOL" ? exchangeRate : 1
-        }.`
-      )
+      description = `¿Estás seguro que querés emitir la Factura E real en ARCA por ${
+        currencyId === "DOL"
+          ? `USD ${formatNumber(payment.amount)} (${formatARS(amountArs)})`
+          : formatARS(payment.amount)
+      } para ${foreignClientNames[payment.id]?.trim()}? Tipo de cambio: ${
+        currencyId === "DOL" ? exchangeRate : 1
+      }.`
     }
 
-    if (!confirmed) {
+    setInvoiceConfirmation({
+      description,
+      invoiceType,
+      payment,
+    })
+  }
+
+  async function confirmGenerateInvoice() {
+    if (!invoiceConfirmation || issuingPaymentId) {
       return
     }
 
+    const { invoiceType, payment } = invoiceConfirmation
+    const clientCuit = receiverCuits[payment.id]?.trim()
+    const ivaConditionId = clientCuit
+      ? Number(receiverIvaConditions[payment.id] ?? "1")
+      : undefined
+
+    if (invoiceType === "E") {
+      const validationError = validateExportInvoice(payment)
+
+      if (validationError) {
+        setInvoiceConfirmation(null)
+        setInvoiceError(validationError)
+        return
+      }
+    }
+
+    setInvoiceConfirmation(null)
     setIssuingPaymentId(payment.id)
     setInvoiceError("")
 
@@ -782,6 +812,27 @@ export function InvoicingPanel({
           </div>
         </CardContent>
       </Card>
+      <ConfirmationDialog
+        actionLabel="Confirmar"
+        description={
+          invoiceConfirmation?.description ??
+          "¿Estás seguro que querés emitir esta factura?"
+        }
+        disabled={Boolean(issuingPaymentId)}
+        onConfirm={() => void confirmGenerateInvoice()}
+        onOpenChange={(open) => {
+          if (!open) {
+            setInvoiceConfirmation(null)
+          }
+        }}
+        open={Boolean(invoiceConfirmation)}
+        severity="default"
+        title={
+          invoiceConfirmation?.invoiceType === "E"
+            ? "Emitir Factura E"
+            : "Emitir Factura C"
+        }
+      />
     </div>
   )
 }

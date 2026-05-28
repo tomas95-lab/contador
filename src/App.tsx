@@ -11,6 +11,8 @@ import { IncomeTracker } from "@/components/accounting/income-tracker"
 import { InvoicingPanel } from "@/components/accounting/invoicing-panel"
 import { ProjectionsPanel } from "@/components/accounting/projections-panel"
 import { AppSidebar } from "@/components/app-sidebar"
+import { HelpView } from "@/components/help-view"
+import { SettingsView } from "@/components/settings-view"
 import { SiteHeader } from "@/components/site-header"
 import { Button } from "@/components/ui/button"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
@@ -76,6 +78,7 @@ type InvoiceEmissionOptions = {
 }
 
 const DEMO_AUTH_STORAGE_KEY = "contable-demo-session"
+const ARCA_CUIT_STORAGE_KEY = "contable-arca-cuit"
 
 const sectionMeta: Record<AppSection, { title: string; description: string }> =
   {
@@ -107,6 +110,14 @@ const sectionMeta: Record<AppSection, { title: string; description: string }> =
       title: "Conectar ARCA",
       description: "Autorizar a Conta sin compartir clave fiscal",
     },
+    configuracion: {
+      title: "Configuración",
+      description: "Cuenta, perfil fiscal, ARCA y sesión",
+    },
+    ayuda: {
+      title: "Ayuda",
+      description: "Soporte para consultas fiscales y técnicas",
+    },
   }
 
 export default function App() {
@@ -127,6 +138,8 @@ export default function App() {
     string | null
   >(null)
   const [isDemoSession, setIsDemoSession] = React.useState(getStoredDemoSession)
+  const [connectedArcaCuit, setConnectedArcaCuit] =
+    React.useState(getStoredArcaCuit)
   const [session, setSession] = React.useState<Session | null>(null)
   const [authStatus, setAuthStatus] = React.useState<AuthStatus>(() =>
     getStoredDemoSession()
@@ -325,6 +338,8 @@ export default function App() {
     setAuthStatus("anonymous")
     arcaCredentialsStatusRef.current = null
     arcaCredentialsUserKeyRef.current = null
+    setStoredArcaCuit(null)
+    setConnectedArcaCuit(null)
     setArcaCredentialsStatus("loading")
     setPayments([])
     setInvoices([])
@@ -347,7 +362,22 @@ export default function App() {
     setFiscalProfile(emptyFiscalProfile)
     setTaxPayments([])
     setUnreadAlertCount(0)
+    setConnectedArcaCuit(null)
     setActiveSection("resumen")
+  }
+
+  function handleReconnectArca() {
+    if (!shouldUseSupabase) {
+      setActiveSection("arca")
+      return
+    }
+
+    setStoredArcaCuit(null)
+    setConnectedArcaCuit(null)
+    arcaCredentialsStatusRef.current = "missing"
+    arcaCredentialsUserKeyRef.current =
+      session?.user.id ?? session?.user.email ?? "authenticated"
+    setArcaCredentialsStatus("missing")
   }
 
   async function addPayment(payment: Omit<IncomePayment, "id">) {
@@ -691,6 +721,19 @@ export default function App() {
         return <AccountantClientsPanel />
       case "arca":
         return <ArcaConnectView />
+      case "configuracion":
+        return (
+          <SettingsView
+            arcaCuit={connectedArcaCuit}
+            arcaStatus={arcaCredentialsStatus}
+            onOpenFiscalProfile={() => setActiveSection("asistente")}
+            onReconnectArca={handleReconnectArca}
+            onSignOut={() => void handleSignOut()}
+            userEmail={userEmail}
+          />
+        )
+      case "ayuda":
+        return <HelpView userEmail={userEmail} userName={sidebarUser.name} />
       case "resumen":
         return (
           <DashboardView
@@ -746,7 +789,9 @@ export default function App() {
   if (shouldUseSupabase && arcaCredentialsStatus === "missing") {
     return (
       <ArcaOnboarding
-        onComplete={() => {
+        onComplete={(cuit) => {
+          setStoredArcaCuit(cuit)
+          setConnectedArcaCuit(cuit)
           arcaCredentialsStatusRef.current = "configured"
           arcaCredentialsUserKeyRef.current =
             session?.user.id ?? session?.user.email ?? "authenticated"
@@ -871,4 +916,25 @@ function setStoredDemoSession(enabled: boolean) {
   }
 
   window.localStorage.removeItem(DEMO_AUTH_STORAGE_KEY)
+}
+
+function getStoredArcaCuit() {
+  if (typeof window === "undefined") {
+    return null
+  }
+
+  return window.localStorage.getItem(ARCA_CUIT_STORAGE_KEY)
+}
+
+function setStoredArcaCuit(cuit: string | null) {
+  if (typeof window === "undefined") {
+    return
+  }
+
+  if (cuit) {
+    window.localStorage.setItem(ARCA_CUIT_STORAGE_KEY, cuit)
+    return
+  }
+
+  window.localStorage.removeItem(ARCA_CUIT_STORAGE_KEY)
 }

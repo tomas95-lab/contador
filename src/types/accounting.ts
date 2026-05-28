@@ -6,6 +6,8 @@ export type AppSection =
   | "proyecciones"
   | "clientes"
   | "arca"
+  | "configuracion"
+  | "ayuda"
 
 export type IncomeMethod = "Transferencia" | "Mercado Pago" | "Efectivo"
 

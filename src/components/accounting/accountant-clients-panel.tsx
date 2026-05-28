@@ -137,7 +137,7 @@ export function AccountantClientsPanel() {
                                 }}
                               />
                             </div>
-                            <span className="text-sm tabular-nums text-muted-foreground">
+                            <span className="text-sm text-muted-foreground tabular-nums">
                               {formatPercent(client.annualUsage)}
                             </span>
                           </div>
@@ -160,7 +160,13 @@ export function AccountantClientsPanel() {
                           </div>
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button size="icon" type="button" variant="ghost">
+                          <Button
+                            disabled
+                            size="icon"
+                            title="Abrir cliente estará disponible cuando el modo multi-cliente esté listo"
+                            type="button"
+                            variant="ghost"
+                          >
                             <ArrowRightIcon />
                             <span className="sr-only">Abrir cliente</span>
                           </Button>

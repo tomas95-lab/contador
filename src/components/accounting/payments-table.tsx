@@ -1,6 +1,7 @@
 import * as React from "react"
 import { CheckIcon, PencilIcon, Trash2Icon, XIcon } from "lucide-react"
 
+import { ConfirmationDialog } from "@/components/confirmation-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -50,6 +51,8 @@ export function PaymentsTable({
   const [pendingPaymentId, setPendingPaymentId] = React.useState<string | null>(
     null
   )
+  const [paymentToDelete, setPaymentToDelete] =
+    React.useState<IncomePayment | null>(null)
   const visiblePayments = sortPaymentsByDate(payments).slice(0, limit)
   const canEdit = Boolean(onDeletePayment || onUpdatePayment)
 
@@ -104,20 +107,23 @@ export function PaymentsTable({
     }
   }
 
-  async function deletePayment(payment: IncomePayment) {
+  function requestDeletePayment(payment: IncomePayment) {
     if (!onDeletePayment || pendingPaymentId) {
       return
     }
 
-    const confirmed = window.confirm(
-      `Eliminar el cobro de ${payment.client} por ${formatARS(payment.amount)}?`
-    )
+    setPaymentToDelete(payment)
+  }
 
-    if (!confirmed) {
+  async function confirmDeletePayment() {
+    if (!onDeletePayment || !paymentToDelete || pendingPaymentId) {
       return
     }
 
+    const payment = paymentToDelete
+
     setPendingPaymentId(payment.id)
+    setPaymentToDelete(null)
 
     try {
       await onDeletePayment(payment.id)
@@ -130,196 +136,218 @@ export function PaymentsTable({
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Fecha</TableHead>
-            <TableHead>Cliente</TableHead>
-            <TableHead>Detalle</TableHead>
-            <TableHead>Medio</TableHead>
-            <TableHead>Factura</TableHead>
-            <TableHead className="text-right">Importe</TableHead>
-            {canEdit && (
-              <TableHead className="w-28 text-right">Acciones</TableHead>
-            )}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {visiblePayments.map((payment) => {
-            const isEditing = editingPaymentId === payment.id
-            const currentDraft = isEditing ? draft : null
-            const isPending = pendingPaymentId === payment.id
+    <>
+      <div className="overflow-hidden rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Fecha</TableHead>
+              <TableHead>Cliente</TableHead>
+              <TableHead>Detalle</TableHead>
+              <TableHead>Medio</TableHead>
+              <TableHead>Factura</TableHead>
+              <TableHead className="text-right">Importe</TableHead>
+              {canEdit && (
+                <TableHead className="w-28 text-right">Acciones</TableHead>
+              )}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {visiblePayments.map((payment) => {
+              const isEditing = editingPaymentId === payment.id
+              const currentDraft = isEditing ? draft : null
+              const isPending = pendingPaymentId === payment.id
 
-            return (
-              <TableRow key={payment.id}>
-                <TableCell className="whitespace-nowrap text-muted-foreground">
-                  {currentDraft ? (
-                    <Input
-                      className="h-8 min-w-32"
-                      type="date"
-                      value={currentDraft.date}
-                      onChange={(event) =>
-                        updateDraft("date", event.target.value)
-                      }
-                    />
-                  ) : (
-                    formatPaymentDate(payment.date)
-                  )}
-                </TableCell>
-                <TableCell className="font-medium">
-                  {currentDraft ? (
-                    <Input
-                      className="h-8 min-w-36"
-                      value={currentDraft.client}
-                      onChange={(event) =>
-                        updateDraft("client", event.target.value)
-                      }
-                    />
-                  ) : (
-                    payment.client
-                  )}
-                </TableCell>
-                <TableCell className="max-w-[260px] text-muted-foreground">
-                  {currentDraft ? (
-                    <Input
-                      className="h-8 min-w-44"
-                      value={currentDraft.description}
-                      onChange={(event) =>
-                        updateDraft("description", event.target.value)
-                      }
-                    />
-                  ) : (
-                    <span className="block truncate">
-                      {payment.description}
-                    </span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  {currentDraft ? (
-                    <Select
-                      value={currentDraft.method}
-                      onValueChange={(value) =>
-                        updateDraft("method", value as IncomeMethod)
-                      }
-                    >
-                      <SelectTrigger className="h-8 min-w-32">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Transferencia">
-                          Transferencia
-                        </SelectItem>
-                        <SelectItem value="Mercado Pago">
-                          Mercado Pago
-                        </SelectItem>
-                        <SelectItem value="Efectivo">Efectivo</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <span className="whitespace-nowrap text-muted-foreground">
-                      {payment.method}
-                    </span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  {currentDraft ? (
-                    <Select
-                      value={currentDraft.invoiceStatus}
-                      onValueChange={(value) =>
-                        updateDraft("invoiceStatus", value as InvoiceStatus)
-                      }
-                    >
-                      <SelectTrigger className="h-8 min-w-28">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="pendiente">Pendiente</SelectItem>
-                        <SelectItem value="facturado">Facturado</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <PaymentStatusBadge status={payment.invoiceStatus} />
-                  )}
-                </TableCell>
-                <TableCell className="text-right font-medium tabular-nums">
-                  {currentDraft ? (
-                    <Input
-                      className="ml-auto h-8 w-32 text-right"
-                      min={0}
-                      type="number"
-                      value={currentDraft.amount || ""}
-                      onChange={(event) =>
-                        updateDraft("amount", Number(event.target.value))
-                      }
-                    />
-                  ) : (
-                    formatARS(payment.amount)
-                  )}
-                </TableCell>
-                {canEdit && (
-                  <TableCell>
-                    <div className="flex justify-end gap-1">
-                      {currentDraft ? (
-                        <>
-                          <Button
-                            disabled={isPending}
-                            onClick={() => void saveDraft()}
-                            size="icon"
-                            type="button"
-                            variant="ghost"
-                          >
-                            <CheckIcon />
-                            <span className="sr-only">Guardar</span>
-                          </Button>
-                          <Button
-                            disabled={isPending}
-                            onClick={stopEditing}
-                            size="icon"
-                            type="button"
-                            variant="ghost"
-                          >
-                            <XIcon />
-                            <span className="sr-only">Cancelar</span>
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          {onUpdatePayment && (
-                            <Button
-                              disabled={Boolean(pendingPaymentId)}
-                              onClick={() => startEditing(payment)}
-                              size="icon"
-                              type="button"
-                              variant="ghost"
-                            >
-                              <PencilIcon />
-                              <span className="sr-only">Editar</span>
-                            </Button>
-                          )}
-                          {onDeletePayment && (
-                            <Button
-                              disabled={Boolean(pendingPaymentId)}
-                              onClick={() => void deletePayment(payment)}
-                              size="icon"
-                              type="button"
-                              variant="ghost"
-                            >
-                              <Trash2Icon />
-                              <span className="sr-only">Eliminar</span>
-                            </Button>
-                          )}
-                        </>
-                      )}
-                    </div>
+              return (
+                <TableRow key={payment.id}>
+                  <TableCell className="whitespace-nowrap text-muted-foreground">
+                    {currentDraft ? (
+                      <Input
+                        className="h-8 min-w-32"
+                        type="date"
+                        value={currentDraft.date}
+                        onChange={(event) =>
+                          updateDraft("date", event.target.value)
+                        }
+                      />
+                    ) : (
+                      formatPaymentDate(payment.date)
+                    )}
                   </TableCell>
-                )}
-              </TableRow>
-            )
-          })}
-        </TableBody>
-      </Table>
-    </div>
+                  <TableCell className="font-medium">
+                    {currentDraft ? (
+                      <Input
+                        className="h-8 min-w-36"
+                        value={currentDraft.client}
+                        onChange={(event) =>
+                          updateDraft("client", event.target.value)
+                        }
+                      />
+                    ) : (
+                      payment.client
+                    )}
+                  </TableCell>
+                  <TableCell className="max-w-[260px] text-muted-foreground">
+                    {currentDraft ? (
+                      <Input
+                        className="h-8 min-w-44"
+                        value={currentDraft.description}
+                        onChange={(event) =>
+                          updateDraft("description", event.target.value)
+                        }
+                      />
+                    ) : (
+                      <span className="block truncate">
+                        {payment.description}
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {currentDraft ? (
+                      <Select
+                        value={currentDraft.method}
+                        onValueChange={(value) =>
+                          updateDraft("method", value as IncomeMethod)
+                        }
+                      >
+                        <SelectTrigger className="h-8 min-w-32">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Transferencia">
+                            Transferencia
+                          </SelectItem>
+                          <SelectItem value="Mercado Pago">
+                            Mercado Pago
+                          </SelectItem>
+                          <SelectItem value="Efectivo">Efectivo</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <span className="whitespace-nowrap text-muted-foreground">
+                        {payment.method}
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {currentDraft ? (
+                      <Select
+                        value={currentDraft.invoiceStatus}
+                        onValueChange={(value) =>
+                          updateDraft("invoiceStatus", value as InvoiceStatus)
+                        }
+                      >
+                        <SelectTrigger className="h-8 min-w-28">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pendiente">Pendiente</SelectItem>
+                          <SelectItem value="facturado">Facturado</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <PaymentStatusBadge status={payment.invoiceStatus} />
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right font-medium tabular-nums">
+                    {currentDraft ? (
+                      <Input
+                        className="ml-auto h-8 w-32 text-right"
+                        min={0}
+                        type="number"
+                        value={currentDraft.amount || ""}
+                        onChange={(event) =>
+                          updateDraft("amount", Number(event.target.value))
+                        }
+                      />
+                    ) : (
+                      formatARS(payment.amount)
+                    )}
+                  </TableCell>
+                  {canEdit && (
+                    <TableCell>
+                      <div className="flex justify-end gap-1">
+                        {currentDraft ? (
+                          <>
+                            <Button
+                              disabled={isPending}
+                              onClick={() => void saveDraft()}
+                              size="icon"
+                              type="button"
+                              variant="ghost"
+                            >
+                              <CheckIcon />
+                              <span className="sr-only">Guardar</span>
+                            </Button>
+                            <Button
+                              disabled={isPending}
+                              onClick={stopEditing}
+                              size="icon"
+                              type="button"
+                              variant="ghost"
+                            >
+                              <XIcon />
+                              <span className="sr-only">Cancelar</span>
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            {onUpdatePayment && (
+                              <Button
+                                disabled={Boolean(pendingPaymentId)}
+                                onClick={() => startEditing(payment)}
+                                size="icon"
+                                type="button"
+                                variant="ghost"
+                              >
+                                <PencilIcon />
+                                <span className="sr-only">Editar</span>
+                              </Button>
+                            )}
+                            {onDeletePayment && (
+                              <Button
+                                disabled={Boolean(pendingPaymentId)}
+                                onClick={() => requestDeletePayment(payment)}
+                                size="icon"
+                                type="button"
+                                variant="ghost"
+                              >
+                                <Trash2Icon />
+                                <span className="sr-only">Eliminar</span>
+                              </Button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </TableCell>
+                  )}
+                </TableRow>
+              )
+            })}
+          </TableBody>
+        </Table>
+      </div>
+      <ConfirmationDialog
+        actionLabel="Eliminar"
+        description={
+          paymentToDelete
+            ? `¿Estás seguro que querés eliminar el cobro de ${
+                paymentToDelete.client
+              } por ${formatARS(paymentToDelete.amount)}?`
+            : "¿Estás seguro que querés eliminar este cobro?"
+        }
+        disabled={Boolean(pendingPaymentId)}
+        onConfirm={() => void confirmDeletePayment()}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPaymentToDelete(null)
+          }
+        }}
+        open={Boolean(paymentToDelete)}
+        severity="destructive"
+        title="Eliminar cobro"
+      />
+    </>
   )
 }
 

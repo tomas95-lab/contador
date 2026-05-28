@@ -9,16 +9,21 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
+import type { AppSection } from "@/types/accounting"
 
 export function NavSecondary({
+  activeItem,
   items,
+  onSelect,
   ...props
 }: {
+  activeItem: AppSection
   items: {
+    id: AppSection
     title: string
-    url: string
     icon: React.ReactNode
   }[]
+  onSelect: (section: AppSection) => void
 } & React.ComponentPropsWithoutRef<typeof SidebarGroup>) {
   return (
     <SidebarGroup {...props}>
@@ -26,11 +31,13 @@ export function NavSecondary({
         <SidebarMenu>
           {items.map((item) => (
             <SidebarMenuItem key={item.title}>
-              <SidebarMenuButton asChild>
-                <a href={item.url}>
-                  {item.icon}
-                  <span>{item.title}</span>
-                </a>
+              <SidebarMenuButton
+                isActive={activeItem === item.id}
+                onClick={() => onSelect(item.id)}
+                tooltip={item.title}
+              >
+                {item.icon}
+                <span>{item.title}</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}
