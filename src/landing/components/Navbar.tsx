@@ -71,13 +71,6 @@ export function Navbar({ onOpenWaitlist }: NavbarProps) {
 
         <div className="hidden items-center gap-3 md:flex">
           <Button
-            asChild
-            className="rounded-2xl border-[#185FA5]/20 bg-white/70 px-5 text-[#185FA5] hover:bg-white"
-            variant="outline"
-          >
-            <Link to="/app">Entrar</Link>
-          </Button>
-          <Button
             className="landing-primary-gradient h-10 rounded-2xl px-5 text-white shadow-lg hover:opacity-95"
             onClick={onOpenWaitlist}
           >
@@ -113,13 +106,6 @@ export function Navbar({ onOpenWaitlist }: NavbarProps) {
                 {link.label}
               </a>
             ))}
-            <Link
-              className="rounded-2xl px-4 py-3 text-sm font-semibold text-[#185FA5] transition-colors hover:bg-white/70"
-              onClick={() => setIsMobileMenuOpen(false)}
-              to="/app"
-            >
-              Entrar
-            </Link>
             <Button
               className="landing-primary-gradient h-11 rounded-2xl text-white"
               onClick={() => {

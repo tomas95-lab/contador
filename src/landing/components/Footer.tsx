@@ -10,12 +10,6 @@ export function Footer() {
         </div>
         <div className="flex flex-wrap gap-5">
           <span>Hecho en Argentina 🇦🇷</span>
-          <Link
-            className="font-semibold text-[#185FA5] transition-colors hover:text-[#4F8CFF]"
-            to="/app"
-          >
-            Entrar a la app
-          </Link>
         </div>
       </div>
     </footer>
