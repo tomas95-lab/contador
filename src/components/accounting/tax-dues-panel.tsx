@@ -69,7 +69,7 @@ export function TaxDuesPanel({
           <div>
             <CardTitle>Cuotas monotributo</CardTitle>
             <CardDescription>
-              Pagadas, pendientes y proximo vencimiento
+              Pagadas, pendientes y próximo vencimiento
             </CardDescription>
           </div>
           {nextDue ? (

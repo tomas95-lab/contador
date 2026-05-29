@@ -51,7 +51,7 @@ const arcaPointOfSaleUrl = arcaUrl
 const stepperSteps: { number: OnboardingStep; label: string }[] = [
   { number: 1, label: "Código" },
   { number: 2, label: "Certificado" },
-  { number: 3, label: "Web Services" },
+  { number: 3, label: "Permisos de ARCA" },
   { number: 4, label: "Puntos de venta" },
   { number: 5, label: "Finalizar" },
 ]
@@ -259,7 +259,7 @@ export function ArcaOnboarding({
                     variant="outline"
                   >
                     <FileKey2Icon />
-                    Descargar CSR
+                    Descargar código
                   </Button>
                 </div>
               </form>
@@ -267,9 +267,9 @@ export function ArcaOnboarding({
 
             <StepCard
               currentStep={currentStep}
-              description="Subí el archivo CSR en Administración de Certificados Digitales y descargá el certificado que te devuelve ARCA."
+              description="Subí el código de autorización en Administración de Certificados Digitales y descargá el certificado que te devuelve ARCA."
               step={2}
-              title="Subí el CSR a ARCA y descargá el certificado"
+              title="Subí el código de autorización a ARCA y descargá el certificado"
             >
               <div className="space-y-4">
                 <div className="grid gap-2 rounded-xl border-[0.5px] bg-secondary/40 p-4 dark:bg-secondary/20">
@@ -304,7 +304,7 @@ export function ArcaOnboarding({
                     variant="outline"
                   >
                     <FileKey2Icon />
-                    Descargar CSR
+                    Descargar código
                   </Button>
                   <Button
                     asChild
@@ -331,10 +331,10 @@ export function ArcaOnboarding({
                     "Una vez dentro, buscá y abrí Administración de Certificados Digitales.",
                     "Hacé click en Agregar alias.",
                     "En Alias escribí cualquier nombre. Por ejemplo: conta-app.",
-                    "En Examinar seleccioná el archivo CSR que descargaste.",
+                    "En Examinar seleccioná el archivo de código de autorización que descargaste.",
                     "Hacé click en Agregar Alias.",
                     "En la lista de alias aparece el tuyo. Hacé click en Ver.",
-                    "Hacé click en Descargar. Se descarga el archivo .crt. Guardalo, lo vas a necesitar en el paso 5.",
+                    "Hacé click en Descargar. Se descarga el archivo de certificado. Guardalo, lo vas a necesitar en el paso 5.",
                   ]}
                 />
 
@@ -350,7 +350,7 @@ export function ArcaOnboarding({
                   onClick={() => setCurrentStep(3)}
                   type="button"
                 >
-                  Ya descargué el .crt
+                  Ya descargué el archivo de certificado
                   <ArrowRightIcon />
                 </Button>
               </div>
@@ -360,11 +360,11 @@ export function ArcaOnboarding({
               currentStep={currentStep}
               description="Autorizá los servicios que permiten emitir facturas comunes y facturas de exportación."
               step={3}
-              title="Autorizá los Web Services en ARCA"
+              title="Autorizá los permisos de ARCA"
             >
               <div className="space-y-4">
                 <InstructionBlock
-                  badge="Web Services"
+                  badge="Permisos de ARCA"
                   title="Qué hacer en Administrador de Relaciones"
                   items={[
                     "Entrá a arca.gob.ar e iniciá sesión con tu CUIT y clave fiscal.",
@@ -396,7 +396,7 @@ export function ArcaOnboarding({
                     onClick={() => setCurrentStep(4)}
                     type="button"
                   >
-                    Ya autoricé los Web Services
+                    Ya autoricé los permisos de ARCA
                     <ArrowRightIcon />
                   </Button>
                 </div>
@@ -493,7 +493,7 @@ export function ArcaOnboarding({
               currentStep={currentStep}
               description="Para terminar, subí el certificado que descargaste desde ARCA y guardá la conexión."
               step={5}
-              title="Subí el .crt a la app"
+              title="Subí el archivo de certificado a la app"
             >
               <form className="grid gap-4" onSubmit={handleSaveCertificate}>
                 <div className="grid gap-2">
@@ -826,5 +826,7 @@ function escapeRegExp(value: string) {
 }
 
 function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Error desconocido"
+  return error instanceof Error
+    ? error.message
+    : "Ocurrió un error inesperado. Intentá de nuevo o contactá soporte desde Ayuda."
 }

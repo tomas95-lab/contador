@@ -8,7 +8,7 @@ type HeroProps = {
 }
 
 const quickWins = [
-  "Facturas C y E con CAE real",
+  "Facturas C y E con número de validación ARCA real",
   "Radar antes de recategorizar",
   "Conta IA disponible 24/7",
 ]

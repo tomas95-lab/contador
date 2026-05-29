@@ -28,7 +28,7 @@ const features = [
   },
   {
     icon: Globe,
-    title: "Factura E Pro",
+    title: "Factura E",
     description: "Para los que cobran del exterior sin miedo",
   },
 ]

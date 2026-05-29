@@ -109,13 +109,16 @@ function getSigningMaterial(credentials: UserArcaCredentials): SigningMaterial {
     ) as forge.pki.rsa.PrivateKey
   } catch {
     throw new ArcaError(
-      "Could not read ARCA private key. Store an unencrypted private key in user_arca_credentials.",
+      "No pudimos leer tus credenciales ARCA. Volvé a cargar el certificado desde Configuración.",
       500
     )
   }
 
   if (!privateKey) {
-    throw new ArcaError("Could not decrypt ARCA private key.", 500)
+    throw new ArcaError(
+      "No pudimos leer tus credenciales ARCA. Volvé a cargar el certificado desde Configuración.",
+      500
+    )
   }
 
   return { certificate, privateKey }
@@ -188,7 +191,7 @@ function parseAccessTicket(xml: string): AccessTicket {
 
   if (!credentials?.token || !credentials?.sign || !header?.expirationTime) {
     throw new ArcaError(
-      "WSAA returned an unexpected login ticket response.",
+      "ARCA no devolvió una respuesta válida. Volvé a intentar más tarde.",
       502,
       {
         parsed,
@@ -219,7 +222,11 @@ async function requestNewTicket(
   const responseXml = result?.loginCmsReturn
 
   if (!responseXml) {
-    throw new ArcaError("WSAA did not return loginCmsReturn.", 502, result)
+    throw new ArcaError(
+      "ARCA no devolvió una respuesta válida. Volvé a intentar más tarde.",
+      502,
+      result
+    )
   }
 
   const ticket = parseAccessTicket(responseXml)

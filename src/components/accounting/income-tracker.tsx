@@ -151,7 +151,7 @@ export function IncomeTracker({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="payment-description">Descripcion</Label>
+              <Label htmlFor="payment-description">Descripción</Label>
               <Input
                 id="payment-description"
                 value={draft.description}

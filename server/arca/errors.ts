@@ -43,9 +43,9 @@ const ARCA_ERROR_RULES: ArcaErrorRule[] = [
       /certificado.*no.*autorizado.*servicio|certificate.*not.*authorized.*service|cert.*not.*authorized/,
     title: "El certificado no está autorizado",
     explanation:
-      "El certificado cargado existe, pero ARCA no lo tiene habilitado para este web service.",
+      "El certificado cargado existe, pero ARCA no lo tiene habilitado para este permiso.",
     action:
-      "Entrá con clave fiscal al Administrador de Relaciones y autorizá el certificado para WSFE o WSFEX, según corresponda.",
+      "Entrá con clave fiscal al Administrador de Relaciones y autorizá el certificado para emitir Factura C o Factura E, según corresponda.",
     severity: "critical",
   },
   {
@@ -64,7 +64,7 @@ const ARCA_ERROR_RULES: ArcaErrorRule[] = [
     explanation:
       "ARCA no pudo validar la firma digital generada con la clave privada del certificado.",
     action:
-      "Generá un nuevo CSR desde Conta, descargá un certificado nuevo en ARCA y volvé a cargarlo.",
+      "Generá un nuevo código de autorización desde Conta, descargá un certificado nuevo en ARCA y volvé a cargarlo.",
     severity: "critical",
   },
   {
@@ -82,9 +82,9 @@ const ARCA_ERROR_RULES: ArcaErrorRule[] = [
       /no.*existe.*punto.*venta.*activo.*wsfe|punto.*venta.*wsfe.*no.*existe|wsfe.*punto.*venta.*no.*activo/,
     title: "No hay punto de venta activo para Factura C",
     explanation:
-      "ARCA no encontró un punto de venta activo para el servicio WSFE, que se usa para Factura C.",
+      "ARCA no encontró un punto de venta activo para el permiso que se usa para Factura C.",
     action:
-      "Activá un punto de venta para WSFE en ARCA o corregí el punto de venta de Factura C en Conta.",
+      "Activá un punto de venta para Factura C en ARCA o corregí el punto de venta de Factura C en Conta.",
     severity: "critical",
   },
   {
@@ -92,9 +92,9 @@ const ARCA_ERROR_RULES: ArcaErrorRule[] = [
       /no.*existe.*punto.*venta.*activo.*wsfex|punto.*venta.*wsfex.*no.*existe|wsfex.*punto.*venta.*no.*activo/,
     title: "No hay punto de venta activo para Factura E",
     explanation:
-      "ARCA no encontró un punto de venta activo para el servicio WSFEX, que se usa para Factura E.",
+      "ARCA no encontró un punto de venta activo para el permiso que se usa para Factura E.",
     action:
-      "Activá un punto de venta para WSFEX en ARCA o corregí el punto de venta de Factura E en Conta.",
+      "Activá un punto de venta para Factura E en ARCA o corregí el punto de venta de Factura E en Conta.",
     severity: "critical",
   },
   {
@@ -102,7 +102,7 @@ const ARCA_ERROR_RULES: ArcaErrorRule[] = [
       /punto.*venta.*(inactivo|no activo|baja)|punto.*venta.*no.*habilitado/,
     title: "El punto de venta está inactivo",
     explanation:
-      "El punto de venta existe, pero no está activo o habilitado para emitir comprobantes.",
+      "El punto de venta existe, pero no está activo o habilitado para emitir facturas.",
     action:
       "Revisá el estado del punto de venta en ARCA y cargá en Conta uno que esté activo.",
     severity: "critical",
@@ -110,19 +110,19 @@ const ARCA_ERROR_RULES: ArcaErrorRule[] = [
   {
     pattern:
       /comprobante.*(ya existe|existente|duplicado)|numero.*comprobante.*(existe|autorizado)|nro.*comprobante.*(existe|autorizado)/,
-    title: "Ese número de comprobante ya existe",
+    title: "Ese número de factura ya existe",
     explanation:
       "ARCA indica que el número que se intentó emitir ya fue usado o autorizado.",
     action:
-      "Actualizá el último comprobante desde ARCA y volvé a intentar emitir.",
+      "Actualizá la última factura desde ARCA y volvé a intentar emitir.",
     severity: "warning",
   },
   {
     pattern:
       /fecha.*fuera.*rango|fecha.*permitid|fchcbte.*rango|cbtefch.*rango|fecha.*comprobante.*rango/,
-    title: "La fecha del comprobante está fuera de rango",
+    title: "La fecha de la factura está fuera de rango",
     explanation:
-      "La fecha enviada no está dentro del período que ARCA permite para este tipo de comprobante.",
+      "La fecha enviada no está dentro del período que ARCA permite para este tipo de factura.",
     action: "Revisá la fecha de emisión y usá una fecha permitida por ARCA.",
     severity: "error",
   },
@@ -131,7 +131,7 @@ const ARCA_ERROR_RULES: ArcaErrorRule[] = [
       /fchvtopago.*anterior|fecha.*vencimiento.*pago.*anterior|vencimiento.*pago.*anterior.*comprobante/,
     title: "La fecha de pago no puede ser anterior",
     explanation:
-      "La fecha de vencimiento de pago quedó antes de la fecha del comprobante, y ARCA no lo permite.",
+      "La fecha de vencimiento de pago quedó antes de la fecha de la factura, y ARCA no lo permite.",
     action:
       "Corregí la fecha de vencimiento de pago para que sea igual o posterior a la fecha de emisión.",
     severity: "error",
@@ -139,9 +139,9 @@ const ARCA_ERROR_RULES: ArcaErrorRule[] = [
   {
     pattern:
       /importe.*(invalido|inválido|negativo|menor|mayor.*cero)|imp(total|neto|iva).*invalid|importe.*debe.*positivo|monto.*(invalido|inválido|negativo)/,
-    title: "El importe del comprobante no es válido",
+    title: "El importe de la factura no es válido",
     explanation:
-      "ARCA recibió un importe vacío, negativo o incompatible con el tipo de comprobante.",
+      "ARCA recibió un importe vacío, negativo o incompatible con el tipo de factura.",
     action:
       "Revisá el monto del cobro y volvé a emitir con un importe mayor a cero.",
     severity: "error",
@@ -161,7 +161,7 @@ const ARCA_ERROR_RULES: ArcaErrorRule[] = [
       /contribuyente.*no.*habilitado.*emitir|no.*habilitado.*emitir.*comprobantes|no puede emitir comprobantes/,
     title: "El contribuyente no está habilitado para emitir",
     explanation:
-      "ARCA indica que este CUIT no tiene habilitada la emisión de comprobantes para el régimen actual.",
+      "ARCA indica que este CUIT no tiene habilitada la emisión de facturas para el régimen actual.",
     action:
       "Revisá la inscripción y los puntos de venta en ARCA antes de volver a emitir.",
     severity: "critical",
@@ -207,7 +207,9 @@ const FALLBACK_ARCA_ERROR: Omit<TranslatedArcaError, "raw"> = {
 }
 
 export function translateArcaError(rawError: string): TranslatedArcaError {
-  const raw = rawError.trim() || "Error desconocido de ARCA"
+  const raw =
+    rawError.trim() ||
+    "Ocurrió un error inesperado. Intentá de nuevo o contactá soporte desde Ayuda."
   const normalizedRaw = normalizeForMatch(raw)
   const matchedRule = ARCA_ERROR_RULES.find((rule) =>
     matchesPattern(rule.pattern, raw, normalizedRaw)

@@ -57,7 +57,7 @@ export function RevenueChart({ payments, category }: RevenueChartProps) {
     <Card className="rounded-lg shadow-none">
       <CardHeader>
         <CardTitle>Facturacion mensual</CardTitle>
-        <CardDescription>Ultimos 6 meses</CardDescription>
+        <CardDescription>Últimos 6 meses</CardDescription>
       </CardHeader>
       <CardContent>
         <ChartContainer

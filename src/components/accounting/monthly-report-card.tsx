@@ -217,12 +217,12 @@ function buildMonthlyReportHtml({
 </head>
 <body>
   <h1>Resumen fiscal mensual</h1>
-  <p class="muted">${escapeHtml(formatMonthName(metrics.currentMonthKey))} · Monotributo categoria ${escapeHtml(category.key)}</p>
-  <p class="muted">Periodo fiscal: ${escapeHtml(formatFiscalPeriodRange(metrics.evaluationPeriod))}</p>
+  <p class="muted">${escapeHtml(formatMonthName(metrics.currentMonthKey))} · Monotributo categoría ${escapeHtml(category.key)}</p>
+  <p class="muted">Período fiscal: ${escapeHtml(formatFiscalPeriodRange(metrics.evaluationPeriod))}</p>
   <div class="grid">
     <div class="metric"><span>Cobrado</span><strong>${formatARS(metrics.currentMonthRevenue)}</strong></div>
     <div class="metric"><span>Pendiente</span><strong>${formatARS(pendingTotal)}</strong></div>
-    <div class="metric"><span>Uso periodo</span><strong>${Math.round(metrics.annualUsage * 100)}%</strong></div>
+    <div class="metric"><span>Uso período</span><strong>${Math.round(metrics.annualUsage * 100)}%</strong></div>
     <div class="metric"><span>Cuota</span><strong>${formatARS(category.monthlyTax)}</strong></div>
   </div>
   <section>
@@ -239,7 +239,7 @@ function buildMonthlyReportHtml({
   <section>
     <h2>Facturas emitidas</h2>
     <table>
-      <thead><tr><th>Fecha</th><th>Numero</th><th>Cliente</th><th class="right">Importe</th></tr></thead>
+      <thead><tr><th>Fecha</th><th>Número</th><th>Cliente</th><th class="right">Importe</th></tr></thead>
       <tbody>${invoiceRows || '<tr><td colspan="4">Sin facturas emitidas.</td></tr>'}</tbody>
     </table>
   </section>

@@ -191,7 +191,7 @@ export const managedClients: ManagedClient[] = [
     monthlyRevenue: 3680000,
     annualUsage: 0.89,
     pendingInvoices: 3,
-    nextAction: "Simular recategorizacion por crecimiento de mayo",
+    nextAction: "Simular recategorización por crecimiento de mayo",
     status: "action",
   },
   {

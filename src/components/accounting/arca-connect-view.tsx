@@ -20,9 +20,9 @@ const contaCuit = import.meta.env.VITE_CONTA_CUIT ?? "XX-XXXXXXXX-X"
 const steps = [
     "Entrar a ARCA con clave fiscal",
     "Ir a Administrador de Relaciones",
-    "Agregar el servicio Facturacion Electronica",
+    "Agregar el servicio Facturación Electrónica",
     "Autorizar a Conta como representante",
-    "Volver a la app y verificar la conexion",
+    "Volver a la app y verificar la conexión",
 ]
 
 export function ArcaConnectView() {
@@ -47,7 +47,7 @@ export function ArcaConnectView() {
               Permiso, no contraseña
             </div>
             <p className="mt-2 text-sm text-muted-foreground">
-              Conta usa una autorizacion formal de ARCA para emitir comprobantes
+              Conta usa una autorización formal de ARCA para emitir facturas
               por el CUIT del usuario. Nunca pedimos clave fiscal.
             </p>
           </div>
@@ -101,9 +101,9 @@ export function ArcaConnectView() {
           <div className="rounded-lg border p-3 text-sm text-muted-foreground">
             <div className="mb-2 flex items-center gap-2 font-medium text-foreground">
               <CheckCircle2Icon className="size-4 text-emerald-500" />
-              Despues de autorizar
+              Después de autorizar
             </div>
-            Conta verifica la relacion y habilita la emision con confirmacion
+            Conta verifica la relación y habilita la emisión con confirmación
             manual antes de cada factura.
           </div>
         </CardContent>

@@ -176,7 +176,10 @@ export async function fetchArcaAnnualSummary(year = new Date().getFullYear()) {
   if (!response.ok) {
     const details = await parseArcaError(response)
 
-    throw new Error(details ?? "No se pudo consultar ARCA.")
+    throw new Error(
+      details ??
+        "No pudimos conectar con ARCA. Verificá tu conexión y volvé a intentarlo. Si el problema persiste, ARCA puede estar caído."
+    )
   }
 
   return (await response.json()) as ArcaAnnualSummary
@@ -197,7 +200,10 @@ export async function emitArcaInvoice(payload: ArcaInvoiceEmissionPayload) {
   if (!response.ok) {
     const details = await parseArcaError(response)
 
-    throw new Error(details ?? "No se pudo emitir la factura en ARCA.")
+    throw new Error(
+      details ??
+        "No pudimos emitir la factura. Revisá que tus credenciales ARCA estén activas y volvé a intentarlo."
+    )
   }
 
   return (await response.json()) as EmittedArcaInvoice
@@ -232,7 +238,10 @@ export async function fetchArcaHistoricalInvoices({
   if (!response.ok) {
     const details = await parseArcaError(response)
 
-    throw new Error(details ?? "No se pudo consultar ARCA.")
+    throw new Error(
+      details ??
+        "No pudimos conectar con ARCA. Verificá tu conexión y volvé a intentarlo. Si el problema persiste, ARCA puede estar caído."
+    )
   }
 
   return (await response.json()) as ArcaHistoricalInvoices
@@ -311,7 +320,7 @@ export async function fetchArcaAssistantContext({
     },
     notes: [
       "El acceso ARCA es de solo lectura para el asistente.",
-      "Los web services ARCA solo devuelven comprobantes de los puntos de venta activos para esos servicios; el historico importado desde Mis Comprobantes se incluye desde Supabase cuando esta cargado.",
+      "Los permisos de ARCA solo devuelven facturas de los puntos de venta activos para esos permisos; el histórico importado desde Mis Facturas se incluye desde Supabase cuando está cargado.",
     ],
   }
 }
@@ -399,5 +408,7 @@ async function settle<T>(
 }
 
 function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Error desconocido"
+  return error instanceof Error
+    ? error.message
+    : "Ocurrió un error inesperado. Intentá de nuevo o contactá soporte desde Ayuda."
 }

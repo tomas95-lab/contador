@@ -130,7 +130,7 @@ export function HelpView({
     <>
       <p>
         Contanos en qué paso del onboarding te trabaste: código, certificado,
-        web services, puntos de venta o carga del .crt.
+        permisos de ARCA, puntos de venta o carga del archivo de certificado.
       </p>
       <p>
         Si viste un mensaje de error, copialo en el mensaje. Todavía no hace
@@ -258,7 +258,7 @@ export function HelpView({
         <CardHeader>
           <CardTitle>Ayuda</CardTitle>
           <CardDescription>
-            Contanos qué pasó y te respondemos con contexto de tu cuenta.
+            Contanos qué pasó y te respondemos teniendo en cuenta tu situación.
           </CardDescription>
         </CardHeader>
         <CardContent>

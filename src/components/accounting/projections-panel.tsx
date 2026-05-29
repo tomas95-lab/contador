@@ -76,7 +76,7 @@ export function ProjectionsPanel({
         <div className="flex flex-col gap-4">
           <div className="grid gap-4 md:grid-cols-3">
             <ProjectionCard
-              description="Proyeccion del periodo"
+              description="Proyección del período"
               icon={<TrendingUpIcon className="size-4 text-amber-500" />}
               title={formatARS(metrics.projectedAnnual)}
             />
@@ -93,7 +93,7 @@ export function ProjectionsPanel({
           </div>
           <Card className="rounded-lg shadow-none">
             <CardHeader>
-              <CardTitle>Escenarios por categoria</CardTitle>
+              <CardTitle>Escenarios por categoría</CardTitle>
               <CardDescription>
                 {formatFiscalPeriodRange(metrics.evaluationPeriod)}
               </CardDescription>
@@ -103,8 +103,8 @@ export function ProjectionsPanel({
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Categoria</TableHead>
-                      <TableHead>Limite anual</TableHead>
+                      <TableHead>Categoría</TableHead>
+                      <TableHead>Límite anual</TableHead>
                       <TableHead>Uso</TableHead>
                       <TableHead className="text-right">Disponible</TableHead>
                     </TableRow>
@@ -166,7 +166,7 @@ export function ProjectionsPanel({
             <CardHeader>
               <CardTitle>Lectura rapida</CardTitle>
               <CardDescription>
-                Categoria {category.key} ·{" "}
+                Categoría {category.key} ·{" "}
                 {metrics.evaluationPeriod.recategorizationLabel}
               </CardDescription>
             </CardHeader>
@@ -203,7 +203,7 @@ export function ProjectionsPanel({
               {nextCategory && (
                 <div className="rounded-lg border p-3">
                   <div className="text-sm text-muted-foreground">
-                    Siguiente categoria
+                    Siguiente categoría
                   </div>
                   <div className="mt-1 flex items-center justify-between">
                     <span className="text-xl font-semibold">
@@ -224,8 +224,8 @@ export function ProjectionsPanel({
                 }
               >
                 {projectedDelta > 0
-                  ? "Proyeccion sobre limite"
-                  : "Dentro del limite"}
+                  ? "Proyección sobre límite"
+                  : "Dentro del límite"}
               </Badge>
             </CardContent>
           </Card>
@@ -287,7 +287,7 @@ function ScenarioSimulator({
       <CardHeader>
         <CardTitle>Simulador</CardTitle>
         <CardDescription>
-          Que pasa si facturo X mas en el periodo
+          Qué pasa si facturo X más en el período
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -326,7 +326,7 @@ function ScenarioSimulator({
             </div>
           </div>
           <div className="rounded-lg border p-3">
-            <span className="text-muted-foreground">Uso categoria</span>
+            <span className="text-muted-foreground">Uso categoría</span>
             <div className="mt-1 font-medium tabular-nums">
               {formatPercent(scenario.usageAfter)}
             </div>
@@ -338,7 +338,7 @@ function ScenarioSimulator({
             </div>
           </div>
           <div className="rounded-lg border p-3">
-            <span className="text-muted-foreground">Categoria sugerida</span>
+            <span className="text-muted-foreground">Categoría sugerida</span>
             <div className="mt-1 font-medium">
               {scenario.recommendedCategory.key}
             </div>
@@ -354,7 +354,7 @@ function ScenarioSimulator({
         >
           {crossesCurrentCategory
             ? `Subiria la cuota ${formatARS(scenario.monthlyTaxDelta)}`
-            : "No cambia tu categoria actual"}
+            : "No cambia tu categoría actual"}
         </Badge>
       </CardContent>
     </Card>

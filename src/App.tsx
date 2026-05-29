@@ -91,23 +91,23 @@ const sectionMeta: Record<AppSection, { title: string; description: string }> =
   {
     resumen: {
       title: "Resumen",
-      description: "Vista mensual y periodo fiscal",
+      description: "Vista mensual y período fiscal",
     },
     cobros: {
       title: "Cobros",
-      description: "Registro de ingresos y facturacion pendiente",
+      description: "Registro de ingresos y facturación pendiente",
     },
     asistente: {
       title: "Conta",
-      description: "Consultas sobre ingresos, limites y proyecciones",
+      description: "Consultas sobre ingresos, límites y proyecciones",
     },
     facturacion: {
-      title: "Facturacion",
-      description: "Preparacion para ARCA y comprobantes",
+      title: "Facturación",
+      description: "Preparación para ARCA y facturas",
     },
     proyecciones: {
       title: "Proyecciones",
-      description: "Escenarios de categoria y periodo fiscal",
+      description: "Escenarios de categoría y período fiscal",
     },
     clientes: {
       title: "Clientes",
@@ -698,8 +698,8 @@ export default function App() {
           setDataStatus("error")
           throw new Error(
             error instanceof Error
-              ? `ARCA emitio la factura ${issuedInvoice.number} con CAE ${issuedInvoice.cae}, pero no se pudo guardar en la app: ${error.message}`
-              : `ARCA emitio la factura ${issuedInvoice.number} con CAE ${issuedInvoice.cae}, pero no se pudo guardar en la app.`
+              ? `ARCA emitió la factura ${issuedInvoice.number} con número de validación ARCA ${issuedInvoice.cae}, pero no se pudo guardar en la app: ${error.message}`
+              : `ARCA emitió la factura ${issuedInvoice.number} con número de validación ARCA ${issuedInvoice.cae}, pero no se pudo guardar en la app.`
           )
         }
       }
@@ -813,7 +813,7 @@ export default function App() {
   if (authStatus === "loading") {
     return (
       <div className="flex min-h-svh items-center justify-center bg-background text-sm text-muted-foreground">
-        Cargando sesion...
+        Cargando sesión...
       </div>
     )
   }
@@ -841,7 +841,7 @@ export default function App() {
   if (shouldUseSupabase && arcaCredentialsStatus === "loading") {
     return (
       <div className="flex min-h-svh items-center justify-center bg-background text-sm text-muted-foreground">
-        Verificando conexion con ARCA...
+        Verificando conexión con ARCA...
       </div>
     )
   }
@@ -869,8 +869,8 @@ export default function App() {
         <div className="max-w-md rounded-lg border bg-card p-4 text-sm shadow-sm">
           <div className="font-medium">No se pudo verificar ARCA</div>
           <p className="mt-2 text-muted-foreground">
-            Revisá que el backend esté encendido y tenga configurada la service
-            role key de Supabase.
+            Revisá tu conexión y volvé a intentarlo. Si administrás esta
+            instalación, verificá que el servidor esté configurado.
           </p>
           <Button className="mt-4" onClick={() => void handleSignOut()}>
             Salir

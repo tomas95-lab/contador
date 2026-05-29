@@ -382,7 +382,10 @@ function getRawArcaError(error: unknown): string {
     return error.message
   }
 
-  return extractDetailText(error) || "Error desconocido de ARCA"
+  return (
+    extractDetailText(error) ||
+    "Ocurrió un error inesperado. Intentá de nuevo o contactá soporte desde Ayuda."
+  )
 }
 
 function extractDetailText(value: unknown): string {

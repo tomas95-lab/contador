@@ -166,7 +166,7 @@ function buildLocalReply({
   }
 
   if (/cripto|crypto|usdt|btc|ethereum/.test(normalized)) {
-    return `${userContext} trataria cripto como caso especial: separar fecha de cobro, valor en pesos de referencia, exchange o wallet usada y comprobantes. Antes de facturar, conviene revisar si corresponde declararlo como ingreso por servicio, diferencia de cambio o tenencia, porque cambia el encuadre.`
+    return `${userContext} trataría cripto como caso especial: separar fecha de cobro, valor en pesos de referencia, exchange o wallet usada y facturas. Antes de facturar, conviene revisar si corresponde declararlo como ingreso por servicio, diferencia de cambio o tenencia, porque cambia el encuadre.`
   }
 
   if (
@@ -174,32 +174,32 @@ function buildLocalReply({
       normalized
     )
   ) {
-    return `${userContext} una factura a exterior necesita mirar moneda, tipo de comprobante, pais del cliente, concepto exportado y liquidacion de divisas. Si ya cobraste, cruza el importe con ARCA y deja trazado el tipo de cambio usado.`
+    return `${userContext} una factura al exterior necesita mirar moneda, tipo de factura, país del cliente, concepto exportado y liquidación de divisas. Si ya cobraste, cruzá el importe con ARCA y dejá trazado el tipo de cambio usado.`
   }
 
   if (/relacion de dependencia|dependencia|sueldo|empleado/.test(normalized)) {
-    return `${userContext} al combinar relacion de dependencia y monotributo hay que separar ingresos: sueldo por un lado, facturacion independiente por otro. El limite de categoria se mira sobre la actividad monotributista, pero ganancias, obra social y aportes pueden requerir revision aparte.`
+    return `${userContext} al combinar relación de dependencia y monotributo hay que separar ingresos: sueldo por un lado, facturación independiente por otro. El límite de categoría se mira sobre la actividad monotributista, pero ganancias, obra social y aportes pueden requerir revisión aparte.`
   }
 
   if (metrics.annualLimitRemaining <= 0) {
-    return `El acumulado del periodo ${formatFiscalPeriodRange(
+    return `El acumulado del período ${formatFiscalPeriodRange(
       metrics.evaluationPeriod
-    )} ya supera el limite por ${formatARS(
+    )} ya supera el límite por ${formatARS(
       Math.abs(metrics.annualLimitRemaining)
-    )}. Conviene revisar recategorizacion y facturacion pendiente.`
+    )}. Conviene revisar recategorización y facturación pendiente.`
   }
 
   if (metrics.annualUsage >= 0.85) {
-    return `Estas usando ${formatPercent(
+    return `Estás usando ${formatPercent(
       metrics.annualUsage
-    )} del limite para ${metrics.evaluationPeriod.recategorizationLabel}. Te quedan ${formatARS(
+    )} del límite para ${metrics.evaluationPeriod.recategorizationLabel}. Te quedan ${formatARS(
       metrics.annualLimitRemaining
-    )}; mira cualquier cobro nuevo antes de facturarlo.`
+    )}; mirá cualquier cobro nuevo antes de facturarlo.`
   }
 
   return `${userContext} el mes viene en ${formatARS(
     metrics.currentMonthRevenue
-  )}. El margen del periodo ${formatFiscalPeriodRange(
+  )}. El margen del período ${formatFiscalPeriodRange(
     metrics.evaluationPeriod
   )} es ${formatARS(metrics.annualLimitRemaining)}.`
 }
@@ -216,7 +216,7 @@ function buildLocalDiagnosis(
   const breachText =
     riskSnapshot?.daysUntilBreach !== null &&
     riskSnapshot?.daysUntilBreach !== undefined
-      ? ` Si seguís igual, el cruce estimado aparece en ${riskSnapshot.daysUntilBreach} días.`
+      ? ` Si seguís igual, la fecha estimada de tope aparece en ${riskSnapshot.daysUntilBreach} días.`
       : ""
 
   return [

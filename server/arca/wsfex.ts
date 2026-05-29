@@ -119,7 +119,7 @@ function ensureNoFexError(result: unknown, operation: string): void {
   const errorRecord = record(error)
 
   if (error && nonZeroCode(errorRecord.ErrCode)) {
-    throw new ArcaError(`${operation} was rejected by WSFEX.`, 502, errorRecord)
+    throw new ArcaError("ARCA rechazó la operación.", 502, errorRecord)
   }
 }
 
@@ -439,7 +439,7 @@ export async function emitFacturaE(
   const resultRecord = record(result)
   const authResult = record(resultRecord.FEXResultAuth)
   if (!authResult.Cae) {
-    throw new ArcaError("WSFEX did not approve the invoice.", 502, {
+    throw new ArcaError("ARCA no aprobó la factura.", 502, {
       result,
       observations: authResult.Motivos_Obs,
     })

@@ -55,7 +55,7 @@ const allowedOrigins = config.corsOrigin
 const globalRateLimit = rateLimit({
   legacyHeaders: false,
   limit: 100,
-  message: { error: "Too many requests." },
+  message: { error: "Recibimos demasiados pedidos. Esperá un minuto y volvé a intentar." },
   standardHeaders: "draft-8",
   windowMs: 60 * 1000,
 })
@@ -63,7 +63,10 @@ const credentialsCsrRateLimit = rateLimit({
   keyGenerator: getAuthenticatedRateLimitKey,
   legacyHeaders: false,
   limit: 3,
-  message: { error: "Too many CSR requests. Try again later." },
+  message: {
+    error:
+      "Generaste demasiados códigos de autorización. Esperá un rato y volvé a intentar.",
+  },
   standardHeaders: "draft-8",
   windowMs: 60 * 60 * 1000,
 })
@@ -71,7 +74,10 @@ const invoiceEmitRateLimit = rateLimit({
   keyGenerator: getAuthenticatedRateLimitKey,
   legacyHeaders: false,
   limit: 10,
-  message: { error: "Too many invoice emission requests." },
+  message: {
+    error:
+      "Recibimos demasiados pedidos de emisión. Esperá un minuto y volvé a intentar.",
+  },
   standardHeaders: "draft-8",
   windowMs: 60 * 1000,
 })
@@ -214,7 +220,7 @@ app.use((error: unknown, _req: Request, res: Response, next: NextFunction) => {
 
   if (error instanceof ZodError) {
     res.status(400).json({
-      error: "Invalid request payload.",
+      error: "Los datos enviados no son válidos.",
       details: error.issues,
     })
     return
@@ -230,7 +236,8 @@ app.use((error: unknown, _req: Request, res: Response, next: NextFunction) => {
 
   console.error(error)
   res.status(500).json({
-    error: "Unexpected server error.",
+    error:
+      "Ocurrió un error inesperado. Intentá de nuevo o contactá soporte desde Ayuda.",
   })
 })
 

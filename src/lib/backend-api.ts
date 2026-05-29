@@ -43,7 +43,7 @@ async function getSupabaseAccessToken() {
     return recoveredAccessToken
   }
 
-  throw new Error("Necesitas iniciar sesion para consultar ARCA.")
+  throw new Error("Necesitás iniciar sesión para consultar ARCA.")
 }
 
 async function recoverSupabaseAccessTokenFromStorage() {

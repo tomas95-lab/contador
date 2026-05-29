@@ -64,7 +64,7 @@ export async function generateArcaCsr(
   csr.sign(keyPair.privateKey, forge.md.sha256.create())
 
   if (!csr.verify()) {
-    throw new ArcaError("No se pudo generar un CSR válido.", 500)
+    throw new ArcaError("No se pudo generar un código de autorización válido.", 500)
   }
 
   const privateKey = forge.pki.privateKeyToPem(keyPair.privateKey)
@@ -130,7 +130,7 @@ function getPendingPrivateKey(userId: string) {
   if (!pending || pending.expiresAt <= Date.now()) {
     pendingPrivateKeys.delete(userId)
     throw new ArcaError(
-      "Volvé a generar el CSR antes de subir el certificado.",
+      "Volvé a generar el código de autorización antes de subir el certificado.",
       400
     )
   }
@@ -156,7 +156,7 @@ function assertCertificateMatchesPrivateKey(
 
     if (certificatePublicKey.trim() !== generatedPublicKey.trim()) {
       throw new ArcaError(
-        "El certificado no corresponde al CSR generado en esta sesión.",
+        "El certificado no corresponde al código de autorización generado en esta sesión.",
         400
       )
     }
@@ -173,7 +173,7 @@ function assertCertificateMatchesPrivateKey(
     }
 
     throw new ArcaError(
-      "El archivo .crt no parece ser un certificado válido.",
+      "El archivo de certificado no parece ser válido.",
       400
     )
   }

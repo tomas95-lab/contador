@@ -201,7 +201,7 @@ export function InvoicingPanel({
           setArcaError(
             error instanceof Error
               ? error.message
-              : "No se pudo consultar ARCA."
+              : "No pudimos conectar con ARCA. Verificá tu conexión y volvé a intentarlo. Si el problema persiste, ARCA puede estar caído."
           )
         }
       } finally {
@@ -264,7 +264,9 @@ export function InvoicingPanel({
       setArcaSummary(summary)
     } catch (error) {
       setArcaError(
-        error instanceof Error ? error.message : "No se pudo consultar ARCA."
+        error instanceof Error
+          ? error.message
+          : "No pudimos conectar con ARCA. Verificá tu conexión y volvé a intentarlo. Si el problema persiste, ARCA puede estar caído."
       )
     } finally {
       setIsSyncingArca(false)
@@ -404,7 +406,7 @@ export function InvoicingPanel({
       setInvoiceError(
         error instanceof Error
           ? error.message
-          : "No se pudo emitir la factura en ARCA."
+          : "No pudimos emitir la factura. Revisá que tus credenciales ARCA estén activas y volvé a intentarlo."
       )
     } finally {
       setIssuingPaymentId(null)
@@ -540,7 +542,7 @@ export function InvoicingPanel({
           </Card>
           <Card className="rounded-lg shadow-none">
             <CardHeader>
-              <CardDescription>Comprobantes</CardDescription>
+              <CardDescription>Facturas</CardDescription>
               <CardTitle className="text-2xl tabular-nums">
                 {invoicedPayments.length}
               </CardTitle>
@@ -549,8 +551,10 @@ export function InvoicingPanel({
         </div>
         <Card className="rounded-lg shadow-none">
           <CardHeader>
-            <CardTitle>Cola de facturacion</CardTitle>
-            <CardDescription>Cobros pendientes de CAE</CardDescription>
+            <CardTitle>Cobros listos para facturar</CardTitle>
+            <CardDescription>
+              Cobros pendientes de número de validación ARCA
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {invoiceError ? (
@@ -571,7 +575,7 @@ export function InvoicingPanel({
                           </Badge>
                           <Badge variant="secondary">
                             {invoiceTypes[payment.id] === "E"
-                              ? "Factura E Pro"
+                              ? "Factura E"
                               : "Factura C"}
                           </Badge>
                         </div>
@@ -599,7 +603,7 @@ export function InvoicingPanel({
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="C">Factura C</SelectItem>
-                          <SelectItem value="E">Factura E Pro</SelectItem>
+                          <SelectItem value="E">Factura E</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -706,8 +710,10 @@ export function InvoicingPanel({
         </Card>
         <Card className="rounded-lg shadow-none">
           <CardHeader>
-            <CardTitle>Comprobantes emitidos</CardTitle>
-            <CardDescription>Facturas con CAE registradas</CardDescription>
+            <CardTitle>Facturas emitidas</CardTitle>
+            <CardDescription>
+              Facturas con número de validación ARCA registrado
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {sortedInvoices.length > 0 ? (
@@ -725,7 +731,7 @@ export function InvoicingPanel({
                           </span>
                           <Badge variant="outline">
                             {invoice.status === "draft"
-                              ? "Borrador interno"
+                              ? "Sin emitir"
                               : "Emitida"}
                           </Badge>
                         </div>
@@ -750,7 +756,7 @@ export function InvoicingPanel({
               </div>
             ) : (
               <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                Todavia no emitiste facturas desde la app.
+                Todavía no emitiste facturas desde la app.
               </div>
             )}
           </CardContent>
@@ -761,13 +767,15 @@ export function InvoicingPanel({
           <div className="flex items-start justify-between gap-3">
             <div>
               <CardTitle>ARCA</CardTitle>
-              <CardDescription>Conexion fiscal con auto-sync</CardDescription>
+              <CardDescription>
+                Conexión fiscal que se sincroniza sola
+              </CardDescription>
             </div>
             <Badge variant="outline">
               {isSyncingArca
                 ? "Sincronizando"
                 : arcaSummary
-                  ? "Auto-sync"
+                  ? "Se sincroniza solo"
                   : "Preparado"}
             </Badge>
           </div>
@@ -788,13 +796,14 @@ export function InvoicingPanel({
               Factura C
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Emision real por WSFE activa. CAE oficial al emitir.
+              Emisión real activa. Se obtiene el número de validación ARCA al
+              emitir.
             </p>
           </div>
           <div className="rounded-lg border p-3">
             <div className="flex items-center gap-2 font-medium">
               <ClockIcon className="size-4 text-amber-500" />
-              WSFE
+              Permisos de ARCA
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
               {isDemo
@@ -1138,14 +1147,14 @@ function buildInvoiceHtml(invoice: GeneratedInvoice) {
   const invoiceLetter = invoice.invoiceType.replace("Factura ", "")
   const caeMarkup =
     isIssued && invoice.cae
-      ? `<p><strong>CAE:</strong> ${escapeHtml(invoice.cae)}</p>
-        <p><strong>Vto. CAE:</strong> ${escapeHtml(
+      ? `<p><strong>Número de validación ARCA:</strong> ${escapeHtml(invoice.cae)}</p>
+        <p><strong>Vencimiento de validación:</strong> ${escapeHtml(
           invoice.caeExpiresAt ?? "-"
         )}</p>`
       : ""
   const noticeMarkup = isIssued
-    ? `<div class="official">Comprobante fiscal emitido con CAE registrado en ARCA.</div>`
-    : `<div class="warning">Este archivo es un borrador interno. Para emitir una factura fiscal valida falta solicitar CAE en ARCA.</div>`
+    ? `<div class="official">Factura fiscal emitida con número de validación ARCA registrado.</div>`
+    : `<div class="warning">Esta factura está sin emitir. Para emitir una factura fiscal válida falta solicitar el número de validación ARCA.</div>`
 
   return `<!doctype html>
 <html lang="es">
@@ -1190,7 +1199,7 @@ function buildInvoiceHtml(invoice: GeneratedInvoice) {
     <table>
       <thead>
         <tr>
-          <th>Descripcion</th>
+          <th>Descripción</th>
           <th class="right">Importe</th>
         </tr>
       </thead>

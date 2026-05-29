@@ -32,7 +32,7 @@ const plans = [
     badge: null,
     features: [
       "Todo lo del plan Simple",
-      "Factura E Pro para cobros en USD",
+      "Factura E para cobros en USD",
       "Clientes extranjeros guardados",
       "Tipo de cambio y equivalente ARS",
     ],

@@ -70,7 +70,7 @@ const severityMeta: Record<
     badge:
       "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300",
     icon: <BellRingIcon className="size-4 text-amber-500" />,
-    label: "Atencion",
+    label: "Atención",
     row: "border-amber-200/70 bg-amber-50/60 dark:border-amber-900/70 dark:bg-amber-950/30",
   },
   info: {

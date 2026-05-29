@@ -35,7 +35,7 @@ const workStatusOptions = [
   "Prestador de servicios",
   "Comercio",
   "Profesional independiente",
-  "Relacion de dependencia + monotributo",
+  "Relación de dependencia + monotributo",
   "Emprendimiento",
 ]
 
@@ -48,11 +48,11 @@ const specialCaseOptions = [
   },
   {
     label: "Exterior",
-    note: "Tengo clientes del exterior o facturas de exportacion.",
+    note: "Tengo clientes del exterior o facturas de exportación.",
   },
   {
     label: "Dependencia",
-    note: "Tambien trabajo en relacion de dependencia.",
+    note: "También trabajo en relación de dependencia.",
   },
 ]
 
@@ -102,9 +102,9 @@ export function FiscalProfileCard({ onSave, profile }: FiscalProfileCardProps) {
   return (
     <Card className="rounded-lg shadow-none">
       <CardHeader>
-        <CardTitle>Contexto para Conta</CardTitle>
+        <CardTitle>Tu situación para Conta</CardTitle>
         <CardDescription>
-          Contale tu situacion una vez y la IA la usa en cada respuesta.
+          Contale tu situación una vez y la IA la usa en cada respuesta.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -148,7 +148,7 @@ export function FiscalProfileCard({ onSave, profile }: FiscalProfileCardProps) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label>Categoria</Label>
+              <Label>Categoría</Label>
               <Select
                 value={draft.currentCategory || undefined}
                 onValueChange={(value) =>
@@ -213,10 +213,10 @@ export function FiscalProfileCard({ onSave, profile }: FiscalProfileCardProps) {
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="notes">Situacion y objetivos</Label>
+            <Label htmlFor="notes">Situación y objetivos</Label>
             <Textarea
               id="notes"
-              placeholder="Ej: estoy arrancando, cobro por proyectos, quiero no pasarme de categoria, tengo clientes del exterior..."
+              placeholder="Ej: estoy arrancando, cobro por proyectos, quiero no pasarme de categoría, tengo clientes del exterior..."
               value={draft.notes}
               onChange={(event) =>
                 setDraft((current) => ({
@@ -228,13 +228,13 @@ export function FiscalProfileCard({ onSave, profile }: FiscalProfileCardProps) {
           </div>
           {draft.expectedMonthlyIncome ? (
             <p className="text-xs text-muted-foreground">
-              Proyeccion simple: {formatARS(draft.expectedMonthlyIncome * 12)}{" "}
+              Proyección simple: {formatARS(draft.expectedMonthlyIncome * 12)}{" "}
               al año.
             </p>
           ) : null}
           <Button className="w-full" disabled={isSaving} type="submit">
             <SaveIcon />
-            {isSaving ? "Guardando..." : "Guardar contexto"}
+            {isSaving ? "Guardando..." : "Guardar tu situación"}
           </Button>
         </form>
       </CardContent>

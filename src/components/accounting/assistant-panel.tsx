@@ -261,7 +261,7 @@ export function AssistantPanel({
         try {
           arcaContext = await fetchArcaAssistantContext({ metrics, payments })
           assistantPrompt = [
-            "La app consulto la API de ARCA automaticamente en modo solo lectura y adjunto el contexto autorizado.",
+            "La app consultó ARCA automáticamente en modo solo lectura y adjuntó tu situación autorizada.",
             `Pregunta original: ${prompt}`,
             "Responde usando los datos fiscales reales disponibles. Si ARCA no devuelve historico para algun punto de venta, usa tambien los registros importados en la app y aclara la brecha.",
           ].join("\n")
@@ -270,8 +270,8 @@ export function AssistantPanel({
             role: "assistant",
             content:
               error instanceof Error
-                ? `Intente consultar ARCA automaticamente, pero fallo: ${error.message}`
-                : "Intente consultar ARCA automaticamente, pero fallo.",
+                ? `Intenté consultar ARCA automáticamente, pero falló: ${error.message}`
+                : "Intenté consultar ARCA automáticamente, pero falló. Verificá tu conexión y volvé a intentarlo.",
           })
           return
         } finally {
@@ -326,7 +326,7 @@ export function AssistantPanel({
       await onAddMessage({
         role: "assistant",
         content:
-          "Ese cobro ya no figura como pendiente. No emito nada para evitar duplicar comprobantes.",
+          "Ese cobro ya no figura como pendiente. No emito nada para evitar duplicar facturas.",
       })
       setPendingInvoiceDraft(null)
       return
@@ -345,7 +345,7 @@ export function AssistantPanel({
         destinationCountryCode <= 0)
     ) {
       setInvoiceError(
-        "Para Factura E necesito nombre, domicilio y codigo de pais destino del cliente del exterior."
+        "Para Factura E necesito nombre, domicilio y código de país destino del cliente del exterior."
       )
       return
     }
@@ -378,7 +378,7 @@ export function AssistantPanel({
       await onAddMessage({
         role: "assistant",
         content:
-          "Ese cobro ya no figura como pendiente. No emito nada para evitar duplicar comprobantes.",
+          "Ese cobro ya no figura como pendiente. No emito nada para evitar duplicar facturas.",
       })
       setPendingInvoiceDraft(null)
       setInvoiceConfirmation(null)
@@ -423,7 +423,7 @@ export function AssistantPanel({
       const message =
         error instanceof Error
           ? error.message
-          : "No se pudo emitir la factura en ARCA."
+          : "No pudimos emitir la factura. Revisá que tus credenciales ARCA estén activas y volvé a intentarlo."
 
       setInvoiceError(message)
       await onAddMessage({
@@ -451,7 +451,7 @@ export function AssistantPanel({
               variant="outline"
             >
               <Trash2Icon />
-              Limpiar
+              Borrar conversación
             </Button>
           </div>
         </CardHeader>
@@ -800,7 +800,7 @@ function PreparedInvoiceCard({
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="assistant-export-country">
-                    Codigo pais destino
+                    Código país destino
                   </Label>
                   <Input
                     id="assistant-export-country"
@@ -821,7 +821,7 @@ function PreparedInvoiceCard({
                     onChange={(event) =>
                       onClientAddressChange(event.target.value)
                     }
-                    placeholder="Ciudad, pais"
+                    placeholder="Ciudad, país"
                     value={clientAddress}
                   />
                 </div>
@@ -834,7 +834,7 @@ function PreparedInvoiceCard({
                     onChange={(event) =>
                       onClientTaxIdChange(event.target.value)
                     }
-                    placeholder="Opcional si usas CUIT pais"
+                    placeholder="Opcional si usás CUIT país"
                     value={clientTaxId}
                   />
                 </div>

@@ -46,7 +46,7 @@ export function LoginForm({
     setMessage("")
 
     if (!canUseEmailAuth) {
-      setError("El acceso con email no esta configurado en este entorno.")
+      setError("El acceso con email no está configurado en este entorno.")
       return
     }
 
@@ -67,7 +67,7 @@ export function LoginForm({
       setError(
         error instanceof Error
           ? error.message
-          : "No pudimos iniciar sesion."
+          : "No pudimos iniciar sesión. Verificá tu email y contraseña."
       )
     } finally {
       setIsPending(false)
@@ -131,7 +131,7 @@ export function LoginForm({
                   {mode === "login" ? "Entrar" : "Crear cuenta"}
                 </Button>
                 <FieldDescription className="text-center">
-                  {mode === "login" ? "No tenes cuenta?" : "Ya tenes cuenta?"}{" "}
+                  {mode === "login" ? "¿No tenés cuenta?" : "¿Ya tenés cuenta?"}{" "}
                   <button
                     className="font-medium"
                     onClick={() =>
@@ -141,7 +141,7 @@ export function LoginForm({
                     }
                     type="button"
                   >
-                    {mode === "login" ? "Registrate" : "Iniciar sesion"}
+                    {mode === "login" ? "Registrate" : "Iniciar sesión"}
                   </button>
                 </FieldDescription>
               </Field>
@@ -164,7 +164,7 @@ export function LoginForm({
               Entrar con demo
             </Button>
             <p className="text-center text-xs text-muted-foreground">
-              Usa datos de ejemplo sin crear cuenta.
+              Usá datos de ejemplo sin crear cuenta.
             </p>
           </div>
         </CardContent>

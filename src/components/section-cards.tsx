@@ -37,7 +37,7 @@ export function SectionCards({
     <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
       <CardModified
         title={formatARS(metrics.annualLimitRemaining)}
-        description="Margen hasta recategorizacion"
+        description="Margen hasta recategorización"
         action={
           <Badge
             variant="outline"
@@ -51,8 +51,8 @@ export function SectionCards({
             {formatPercent(metrics.annualUsage)}
           </Badge>
         }
-        footerMain={`Usaste ${formatARS(metrics.annualTotal)} de categoria ${category.key}`}
-        footerSub={`Limite: ${formatARS(category.annualLimit)}`}
+        footerMain={`Usaste ${formatARS(metrics.annualTotal)} de categoría ${category.key}`}
+        footerSub={`Límite: ${formatARS(category.annualLimit)}`}
         variant={metrics.annualUsage >= 0.8 ? "warning" : "success"}
       />
 
@@ -72,16 +72,16 @@ export function SectionCards({
             {projectedGoesUp ? "Sube" : "OK"}
           </Badge>
         }
-        footerMain={`Proyeccion: ${formatARS(metrics.projectedAnnual)}`}
-        footerSub={`Actual: categoria ${category.key}`}
+        footerMain={`Proyección: ${formatARS(metrics.projectedAnnual)}`}
+        footerSub={`Actual: categoría ${category.key}`}
         variant={projectedGoesUp ? "warning" : "success"}
       />
 
       <CardModified
         title={
-          hasBreachProjection ? `${metrics.daysUntilBreach} dias` : "Sin cruce"
+          hasBreachProjection ? `${metrics.daysUntilBreach} días` : "Sin cruce"
         }
-        description="Dias hasta riesgo"
+        description="Días hasta riesgo"
         action={
           <Badge
             className={
@@ -97,10 +97,10 @@ export function SectionCards({
         }
         footerMain={
           metrics.projectedBreachDate
-            ? `Cruce estimado: ${formatLongDate(metrics.projectedBreachDate)}`
-            : "Al ritmo actual no cruzas el limite"
+            ? `Fecha estimada de tope: ${formatLongDate(metrics.projectedBreachDate)}`
+            : "Al ritmo actual no cruzás el límite"
         }
-        footerSub="Dentro del periodo fiscal evaluado"
+        footerSub="Dentro del período fiscal evaluado"
         variant={hasBreachProjection ? "warning" : "success"}
       />
 
@@ -138,7 +138,7 @@ function getNextFiscalMilestone(metrics: FinancialMetrics) {
     date: recategorizationDate,
     kind: "recategorization" as const,
     label: metrics.evaluationPeriod.isFilingWindow
-      ? "Cierre de ventana de recategorizacion"
-      : "Inicio de ventana de recategorizacion",
+      ? "Cierre de ventana de recategorización"
+      : "Inicio de ventana de recategorización",
   }
 }

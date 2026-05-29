@@ -40,7 +40,7 @@ const statusMeta: Record<
     className:
       "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300",
     icon: <CheckCircle2Icon />,
-    label: "Al dia",
+    label: "Al día",
   },
   watch: {
     className:
@@ -99,7 +99,7 @@ export function AccountantClientsPanel() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Cliente</TableHead>
-                    <TableHead>Categoria</TableHead>
+                    <TableHead>Categoría</TableHead>
                     <TableHead>Uso anual</TableHead>
                     <TableHead>Pendientes</TableHead>
                     <TableHead>Proxima accion</TableHead>

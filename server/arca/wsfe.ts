@@ -102,7 +102,7 @@ function auth(credentials: UserArcaCredentials, token: string, sign: string) {
 function ensureNoWsfeErrors(result: unknown, operation: string): void {
   const errors = asArray(record(record(result).Errors).Err)
   if (errors.length > 0) {
-    throw new ArcaError(`${operation} was rejected by WSFE.`, 502, errors)
+    throw new ArcaError("ARCA rechazó la operación.", 502, errors)
   }
 }
 
@@ -205,7 +205,7 @@ export async function emitFacturaC(
   )
 
   if (!detailResponse.CAE) {
-    throw new ArcaError("WSFE did not approve the invoice.", 502, {
+    throw new ArcaError("ARCA no aprobó la factura.", 502, {
       result,
       observations: detailResponse.Observaciones,
     })

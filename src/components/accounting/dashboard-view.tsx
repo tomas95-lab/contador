@@ -99,7 +99,7 @@ export function DashboardView({
         <div className="flex flex-col gap-4">
           <Card className="rounded-lg shadow-none">
             <CardHeader>
-              <CardTitle>Categoria fiscal</CardTitle>
+          <CardTitle>Categoría fiscal</CardTitle>
               <CardDescription>
                 {metrics.evaluationPeriod.statusLabel}
               </CardDescription>
@@ -107,7 +107,7 @@ export function DashboardView({
             <CardContent className="space-y-5">
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Uso del periodo</span>
+                  <span className="text-muted-foreground">Uso del período</span>
                   <span className="font-medium tabular-nums">
                     {formatPercent(metrics.annualUsage)}
                   </span>
@@ -158,7 +158,7 @@ export function DashboardView({
       </div>
       <Card className="rounded-lg shadow-none">
         <CardHeader>
-          <CardTitle>Ultimos cobros</CardTitle>
+          <CardTitle>Últimos cobros</CardTitle>
           <CardDescription>Movimientos cargados recientemente</CardDescription>
         </CardHeader>
         <CardContent>
@@ -283,7 +283,7 @@ function RiskStatusCard({
             value={formatARS(metrics.projectedAnnual)}
           />
           <RadarMetric
-            label="Cruce estimado"
+            label="Fecha estimada de tope"
             value={
               metrics.projectedBreachDate
                 ? formatLongDate(metrics.projectedBreachDate)
@@ -297,7 +297,7 @@ function RiskStatusCard({
         </div>
         <div className="flex flex-col gap-3 rounded-lg border bg-background/70 p-3 text-sm md:flex-row md:items-center md:justify-between">
           <span className="text-muted-foreground">
-            Periodo evaluado:{" "}
+            Período evaluado:{" "}
             {formatFiscalPeriodRange(metrics.evaluationPeriod)}
           </span>
           <Button onClick={onOpenProjections} size="sm" type="button">

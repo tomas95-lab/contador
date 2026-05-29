@@ -341,7 +341,7 @@ export function getProactiveAlerts({
         daysUntilDue <= 1
           ? "Ojo: el 20 vence tu cuota"
           : `El ${formatLongDate(nextDueDate)} vence tu cuota`,
-      description: `Monotributo categoria ${category.key}: ${formatARS(
+      description: `Monotributo categoría ${category.key}: ${formatARS(
         category.monthlyTax
       )}. Conviene dejarlo preparado antes del vencimiento.`,
       severity: daysUntilDue <= 1 ? "warning" : "info",
@@ -352,14 +352,14 @@ export function getProactiveAlerts({
   if (metrics.annualUsage >= 1) {
     alerts.push({
       id: "category-exceeded",
-      title: "Ya pasaste el limite del periodo",
-      description: `El acumulado supera la categoria ${
+      title: "Ya pasaste el límite del período",
+      description: `El acumulado supera la categoría ${
         category.key
       } por ${formatARS(Math.abs(metrics.annualLimitRemaining))} en ${
         metrics.evaluationPeriod.label
       }.`,
       severity: "critical",
-      action: "Revisar recategorizacion",
+      action: "Revisar recategorización",
     })
   } else if (
     metrics.daysUntilBreach !== null &&
@@ -367,17 +367,17 @@ export function getProactiveAlerts({
   ) {
     alerts.push({
       id: "projected-breach-soon",
-      title: "Tu ritmo cruza el limite pronto",
-      description: `Si seguis igual, cruzarias el tope en ${
+      title: "Tu ritmo cruza el límite pronto",
+      description: `Si seguís igual, cruzarías el tope en ${
         metrics.daysUntilBreach
-      } dias, alrededor del ${formatLongDate(metrics.projectedBreachDate!)}.`,
+      } días, alrededor del ${formatLongDate(metrics.projectedBreachDate!)}.`,
       severity: metrics.daysUntilBreach < 30 ? "critical" : "warning",
-      action: "Ver proyeccion",
+      action: "Ver proyección",
     })
   } else if (metrics.annualUsage >= category.warningAt) {
     alerts.push({
       id: "category-warning",
-      title: "Estas cerca del limite del periodo",
+      title: "Estás cerca del límite del período",
       description: `Usaste ${formatPercent(
         metrics.annualUsage
       )} del tope. Quedan ${formatARS(metrics.annualLimitRemaining)} para ${
@@ -389,14 +389,14 @@ export function getProactiveAlerts({
   } else if (metrics.projectedAnnual >= category.annualLimit) {
     alerts.push({
       id: "projected-limit",
-      title: "Tu ritmo actual proyecta recategorizacion",
-      description: `Con este promedio anualizarias ${formatARS(
+      title: "Tu ritmo actual proyecta recategorización",
+      description: `Con este promedio anualizarías ${formatARS(
         metrics.projectedAnnual
-      )} en ${metrics.evaluationPeriod.label}, por encima de la categoria ${
+      )} en ${metrics.evaluationPeriod.label}, por encima de la categoría ${
         category.key
       }.`,
       severity: "warning",
-      action: "Ver proyeccion",
+      action: "Ver proyección",
     })
   }
 
@@ -407,14 +407,14 @@ export function getProactiveAlerts({
   ) {
     alerts.push({
       id: "recategorization-window-risk",
-      title: "Recategorizacion activa con riesgo",
-      description: `Estas en ventana de tramite hasta el ${formatLongDate(
+      title: "Recategorización activa con riesgo",
+      description: `Estás en ventana de trámite hasta el ${formatLongDate(
         metrics.evaluationPeriod.filingEndDate
-      )}. Revisá categoria ${category.key} con ${formatPercent(
+      )}. Revisá categoría ${category.key} con ${formatPercent(
         metrics.annualUsage
-      )} del limite usado.`,
+      )} del límite usado.`,
       severity: metrics.annualUsage >= 0.95 ? "critical" : "warning",
-      action: "Revisar categoria",
+      action: "Revisar categoría",
     })
   }
 
@@ -422,9 +422,9 @@ export function getProactiveAlerts({
     alerts.push({
       id: "months-without-invoices",
       title: "Hay meses sin facturas emitidas",
-      description: `${metrics.monthsWithoutInvoices} meses seguidos sin facturas registradas. Si hubo actividad, conviene revisar comprobantes y pagos.`,
+      description: `${metrics.monthsWithoutInvoices} meses seguidos sin facturas registradas. Si hubo actividad, conviene revisar facturas y pagos.`,
       severity: "warning",
-      action: "Revisar facturacion",
+      action: "Revisar facturación",
     })
   }
 
@@ -432,7 +432,7 @@ export function getProactiveAlerts({
     alerts.push({
       id: "arca-app-delta",
       title: "ARCA y la app no coinciden",
-      description: `La diferencia entre facturacion ARCA (${formatARS(
+      description: `La diferencia entre facturación ARCA (${formatARS(
         arcaDifference.arcaTotal
       )}) y registros de la app (${formatARS(
         arcaDifference.appTotal
@@ -448,7 +448,7 @@ export function getProactiveAlerts({
       title: "Tenes cobros pendientes de facturar",
       description:
         oldestPending && oldestPending > 2
-          ? `${formatARS(pendingTotal)} sin factura. El mas antiguo tiene ${oldestPending} dias.`
+          ? `${formatARS(pendingTotal)} sin factura. El más antiguo tiene ${oldestPending} días.`
           : `${formatARS(pendingTotal)} esperando comprobante fiscal.`,
       severity: "warning",
       action: "Emitir facturas",
@@ -464,9 +464,9 @@ export function getProactiveAlerts({
         title: "Tu ingreso esperado pide seguimiento",
         description: `El onboarding proyecta ${formatARS(
           expectedAnnual
-        )} al año. Conviene mirar categoria antes de aceptar nuevos trabajos.`,
+        )} al año. Conviene mirar categoría antes de aceptar nuevos trabajos.`,
         severity: "info",
-        action: "Actualizar contexto",
+        action: "Actualizar tu situación",
       })
     }
   }
@@ -476,9 +476,9 @@ export function getProactiveAlerts({
       id: "complex-case",
       title: "Caso fiscal con reglas especiales",
       description:
-        "Detecte exterior, cripto o relacion de dependencia en tu contexto. Conta va a responder con mas cautela en esos temas.",
+        "Detecté exterior, cripto o relación de dependencia en tu situación. Conta va a responder con más cautela en esos temas.",
       severity: "info",
-      action: "Ver contexto",
+      action: "Ver tu situación",
     })
   }
 
@@ -487,7 +487,7 @@ export function getProactiveAlerts({
       id: "profile-incomplete",
       title: "Completá tu perfil para que Conta te dé consejos más precisos",
       description:
-        "Actividad, categoria e ingreso esperado hacen que los avisos sean mucho mas precisos desde el dia 1.",
+        "Actividad, categoría e ingreso esperado hacen que los avisos sean mucho más precisos desde el día 1.",
       severity: "info",
       action: "Completar perfil",
     })
@@ -817,11 +817,11 @@ function buildFiscalEvaluationPeriod(
     isFilingWindow,
     mode: isFilingWindow ? "filing-window" : "preventive",
     statusLabel: isFilingWindow
-      ? "Ventana de recategorizacion activa"
-      : "Fuera de ventana de tramite",
+      ? "Ventana de recategorización activa"
+      : "Fuera de ventana de trámite",
     counterLabel: isFilingWindow
-      ? "Periodo oficial en evaluacion"
-      : "Periodo preventivo para la proxima recategorizacion",
+      ? "Período oficial en evaluación"
+      : "Período preventivo para la próxima recategorización",
   }
 }
 
