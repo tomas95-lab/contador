@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import {
   Bar,
   BarChart,
@@ -46,7 +47,11 @@ type RevenueChartProps = {
 }
 
 export function RevenueChart({ payments, category }: RevenueChartProps) {
-  const data = buildRevenueSeries(payments, category)
+  const referenceDate = React.useMemo(() => new Date(), [])
+  const data = React.useMemo(
+    () => buildRevenueSeries(payments, category, referenceDate),
+    [category, payments, referenceDate]
+  )
 
   return (
     <Card className="rounded-lg shadow-none">

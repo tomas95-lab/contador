@@ -271,6 +271,30 @@ export type Database = {
         }
         Relationships: []
       }
+      tax_categories: {
+        Row: {
+          category_key: string
+          annual_limit: number
+          monthly_tax: number
+          warning_at: number
+          updated_at: string
+        }
+        Insert: {
+          category_key: string
+          annual_limit: number
+          monthly_tax: number
+          warning_at?: number
+          updated_at?: string
+        }
+        Update: {
+          category_key?: string
+          annual_limit?: number
+          monthly_tax?: number
+          warning_at?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_arca_credentials: {
         Row: {
           id: string

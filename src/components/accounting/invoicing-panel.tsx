@@ -54,6 +54,7 @@ type InvoicingPanelProps = {
   category: TaxCategory
   isDemo?: boolean
   invoices: GeneratedInvoice[]
+  isIssuingInvoice?: boolean
   onGenerateInvoice: (
     payment: IncomePayment,
     options?: {
@@ -113,6 +114,7 @@ export function InvoicingPanel({
   category,
   isDemo = false,
   invoices,
+  isIssuingInvoice = false,
   onGenerateInvoice,
   payments,
 }: InvoicingPanelProps) {
@@ -172,6 +174,7 @@ export function InvoicingPanel({
   const sortedInvoices = sortInvoicesByDate(invoices)
   const currentYear = new Date().getFullYear()
   const metrics = getFinancialMetrics(payments, category)
+  const isInvoiceEmissionLocked = isIssuingInvoice || Boolean(issuingPaymentId)
 
   React.useEffect(() => {
     if (isDemo) {
@@ -269,7 +272,7 @@ export function InvoicingPanel({
   }
 
   async function handleGenerateInvoice(payment: IncomePayment) {
-    if (issuingPaymentId) {
+    if (isInvoiceEmissionLocked) {
       return
     }
 
@@ -322,7 +325,7 @@ export function InvoicingPanel({
   }
 
   async function confirmGenerateInvoice() {
-    if (!invoiceConfirmation || issuingPaymentId) {
+    if (!invoiceConfirmation || isInvoiceEmissionLocked) {
       return
     }
 
@@ -613,7 +616,7 @@ export function InvoicingPanel({
                         currencyId={getExportCurrencyId(payment.id)}
                         exchangeRate={exchangeRates[payment.id] ?? ""}
                         foreignClients={foreignClients}
-                        isIssuing={issuingPaymentId !== null}
+                        isIssuing={isInvoiceEmissionLocked}
                         onClientAddressChange={(value) =>
                           setForeignClientAddresses((current) => ({
                             ...current,
@@ -677,7 +680,7 @@ export function InvoicingPanel({
                       <DomesticInvoiceFields
                         clientCuit={receiverCuits[payment.id] ?? ""}
                         ivaCondition={receiverIvaConditions[payment.id] ?? "1"}
-                        isIssuing={issuingPaymentId !== null}
+                        isIssuing={isInvoiceEmissionLocked}
                         onClientCuitChange={(value) =>
                           updateReceiverCuit(payment.id, value)
                         }
@@ -840,7 +843,7 @@ export function InvoicingPanel({
           invoiceConfirmation?.description ??
           "¿Estás seguro que querés emitir esta factura?"
         }
-        disabled={Boolean(issuingPaymentId)}
+        disabled={isInvoiceEmissionLocked}
         onConfirm={() => void confirmGenerateInvoice()}
         onOpenChange={(open) => {
           if (!open) {

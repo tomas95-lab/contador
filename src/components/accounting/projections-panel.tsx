@@ -33,7 +33,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { taxCategories } from "@/data/accounting"
 import {
   formatARS,
   formatFiscalPeriodRange,
@@ -45,19 +44,21 @@ import { cn } from "@/lib/utils"
 import type { IncomePayment, TaxCategory } from "@/types/accounting"
 
 type ProjectionsPanelProps = {
+  allCategories: TaxCategory[]
   payments: IncomePayment[]
   category: TaxCategory
   onBack?: () => void
 }
 
 export function ProjectionsPanel({
+  allCategories,
   category,
   onBack,
   payments,
 }: ProjectionsPanelProps) {
   const metrics = getFinancialMetrics(payments, category)
   const projectedDelta = -metrics.projectedLimitRemaining
-  const nextCategory = taxCategories.find(
+  const nextCategory = allCategories.find(
     (item) => item.annualLimit > category.annualLimit
   )
 
@@ -109,7 +110,7 @@ export function ProjectionsPanel({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {taxCategories.map((item) => {
+                    {allCategories.map((item) => {
                       const usage = metrics.annualTotal / item.annualLimit
                       const isCurrent = item.key === category.key
 
@@ -228,7 +229,11 @@ export function ProjectionsPanel({
               </Badge>
             </CardContent>
           </Card>
-          <ScenarioSimulator category={category} payments={payments} />
+          <ScenarioSimulator
+            allCategories={allCategories}
+            category={category}
+            payments={payments}
+          />
         </div>
       </div>
     </div>
@@ -258,9 +263,11 @@ function ProjectionCard({
 }
 
 function ScenarioSimulator({
+  allCategories,
   category,
   payments,
 }: {
+  allCategories: TaxCategory[]
   category: TaxCategory
   payments: IncomePayment[]
 }) {
@@ -268,6 +275,7 @@ function ScenarioSimulator({
   const [repeatCount, setRepeatCount] = React.useState("1")
   const scenario = getBillingScenario({
     addedAmount: Number(amountInput) || 0,
+    allCategories,
     category,
     payments,
     repeatCount: Number(repeatCount),

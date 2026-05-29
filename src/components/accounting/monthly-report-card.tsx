@@ -1,3 +1,5 @@
+import * as React from "react"
+
 import { FileDownIcon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -37,7 +39,11 @@ export function MonthlyReportCard({
   invoices,
   payments,
 }: MonthlyReportCardProps) {
-  const metrics = getFinancialMetrics(payments, category)
+  const referenceDate = React.useMemo(() => new Date(), [])
+  const metrics = React.useMemo(
+    () => getFinancialMetrics(payments, category, referenceDate),
+    [category, payments, referenceDate]
+  )
   const currentMonthPayments = payments.filter(
     (payment) => getMonthKey(payment.date) === metrics.currentMonthKey
   )

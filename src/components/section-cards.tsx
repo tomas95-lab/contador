@@ -7,7 +7,6 @@ import {
   getNextMonotributoDueDate,
   type FinancialMetrics,
 } from "@/lib/accounting"
-import { taxCategories } from "@/data/accounting"
 import type { TaxCategory } from "@/types/accounting"
 import {
   CalendarClockIcon,
@@ -17,14 +16,19 @@ import {
 } from "lucide-react"
 
 type SectionCardsProps = {
+  allCategories: TaxCategory[]
   metrics: FinancialMetrics
   category: TaxCategory
 }
 
-export function SectionCards({ metrics, category }: SectionCardsProps) {
+export function SectionCards({
+  allCategories,
+  metrics,
+  category,
+}: SectionCardsProps) {
   const projectedCategory =
-    taxCategories.find((item) => metrics.projectedAnnual <= item.annualLimit) ??
-    taxCategories[taxCategories.length - 1]
+    allCategories.find((item) => metrics.projectedAnnual <= item.annualLimit) ??
+    allCategories[allCategories.length - 1]
   const projectedGoesUp = projectedCategory.annualLimit > category.annualLimit
   const nextMilestone = getNextFiscalMilestone(metrics)
   const hasBreachProjection = metrics.daysUntilBreach !== null

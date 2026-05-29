@@ -6,6 +6,7 @@ import express, {
   type Request,
   type Response,
 } from "express"
+import rateLimit from "express-rate-limit"
 import jwt, { type GetPublicKeyOrSecret, type JwtPayload } from "jsonwebtoken"
 import jwksClient from "jwks-rsa"
 
@@ -51,7 +52,31 @@ const app = express()
 const allowedOrigins = config.corsOrigin
   .split(",")
   .map((origin) => origin.trim())
+const globalRateLimit = rateLimit({
+  legacyHeaders: false,
+  limit: 100,
+  message: { error: "Too many requests." },
+  standardHeaders: "draft-8",
+  windowMs: 60 * 1000,
+})
+const credentialsCsrRateLimit = rateLimit({
+  keyGenerator: getAuthenticatedRateLimitKey,
+  legacyHeaders: false,
+  limit: 3,
+  message: { error: "Too many CSR requests. Try again later." },
+  standardHeaders: "draft-8",
+  windowMs: 60 * 60 * 1000,
+})
+const invoiceEmitRateLimit = rateLimit({
+  keyGenerator: getAuthenticatedRateLimitKey,
+  legacyHeaders: false,
+  limit: 10,
+  message: { error: "Too many invoice emission requests." },
+  standardHeaders: "draft-8",
+  windowMs: 60 * 1000,
+})
 
+app.use(globalRateLimit)
 app.use(
   cors({
     origin: allowedOrigins,
@@ -68,9 +93,13 @@ app.get("/api/health", (_req, res) => {
 })
 
 app.get("/api/credentials/status", getArcaCredentialsStatus)
-app.post("/api/credentials/generate-csr", generateArcaCsr)
+app.post(
+  "/api/credentials/generate-csr",
+  credentialsCsrRateLimit,
+  generateArcaCsr
+)
 app.post("/api/credentials/save", saveArcaCredentials)
-app.post("/api/invoices/emit", emitInvoice)
+app.post("/api/invoices/emit", invoiceEmitRateLimit, emitInvoice)
 app.get("/api/invoices/arca/annual-summary", getAnnualArcaSummary)
 app.get("/api/invoices/arca/historical", getHistoricalArcaInvoices)
 app.get("/api/invoices/arca/points-of-sale", getArcaPointOfSales)
@@ -154,6 +183,10 @@ function getBearerToken(req: Request) {
   }
 
   return token
+}
+
+function getAuthenticatedRateLimitKey(req: Request) {
+  return req.userId ?? "authenticated"
 }
 
 function isJwtPayloadWithSubject(

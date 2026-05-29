@@ -57,6 +57,7 @@ type AssistantPanelProps = {
   payments: IncomePayment[]
   category: TaxCategory
   isDemo?: boolean
+  isIssuingInvoice?: boolean
   messages: AssistantMessage[]
   profile: UserFiscalProfile
   onAddMessage: (
@@ -103,6 +104,7 @@ export function AssistantPanel({
   payments,
   category,
   isDemo = false,
+  isIssuingInvoice = false,
   messages,
   onAddMessage,
   onClearMessages,
@@ -124,7 +126,6 @@ export function AssistantPanel({
   const [invoiceConfirmation, setInvoiceConfirmation] =
     React.useState<InvoiceConfirmation | null>(null)
   const [isClearing, setIsClearing] = React.useState(false)
-  const [isIssuingInvoice, setIsIssuingInvoice] = React.useState(false)
   const [isQueryingArca, setIsQueryingArca] = React.useState(false)
   const [isPending, setIsPending] = React.useState(false)
   const messagesScrollRef = React.useRef<HTMLDivElement | null>(null)
@@ -391,7 +392,6 @@ export function AssistantPanel({
     const destinationCountryCode = Number(invoiceDestinationCountryCode)
 
     setInvoiceConfirmation(null)
-    setIsIssuingInvoice(true)
     setInvoiceError("")
 
     try {
@@ -430,8 +430,6 @@ export function AssistantPanel({
         role: "assistant",
         content: `No pude emitir la factura: ${message}`,
       })
-    } finally {
-      setIsIssuingInvoice(false)
     }
   }
 

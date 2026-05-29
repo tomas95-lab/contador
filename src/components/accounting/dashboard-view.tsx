@@ -1,3 +1,5 @@
+import * as React from "react"
+
 import {
   Card,
   CardContent,
@@ -35,6 +37,7 @@ import type {
 } from "@/types/accounting"
 
 type DashboardViewProps = {
+  allCategories: TaxCategory[]
   payments: IncomePayment[]
   invoices: GeneratedInvoice[]
   category: TaxCategory
@@ -48,6 +51,7 @@ type DashboardViewProps = {
 }
 
 export function DashboardView({
+  allCategories,
   category,
   invoices,
   onMarkTaxDuePaid,
@@ -59,9 +63,19 @@ export function DashboardView({
   taxDueActionMonthKey,
   taxPayments,
 }: DashboardViewProps) {
-  const metrics = getFinancialMetrics(payments, category)
-  const alerts = getProactiveAlerts({ category, payments, profile })
-  const dues = getTaxDueHistory(category, new Date(), taxPayments)
+  const referenceDate = React.useMemo(() => new Date(), [])
+  const metrics = React.useMemo(
+    () => getFinancialMetrics(payments, category, referenceDate),
+    [category, payments, referenceDate]
+  )
+  const alerts = React.useMemo(
+    () => getProactiveAlerts({ category, payments, profile, referenceDate }),
+    [category, payments, profile, referenceDate]
+  )
+  const dues = React.useMemo(
+    () => getTaxDueHistory(category, referenceDate, taxPayments),
+    [category, referenceDate, taxPayments]
+  )
 
   return (
     <div className="flex flex-col gap-4 md:gap-6">
@@ -75,7 +89,11 @@ export function DashboardView({
         onOpenSection={onOpenSection}
         onUnreadCountChange={onUnreadAlertsChange}
       />
-      <SectionCards metrics={metrics} category={category} />
+      <SectionCards
+        allCategories={allCategories}
+        metrics={metrics}
+        category={category}
+      />
       <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
         <RevenueChart payments={payments} category={category} />
         <div className="flex flex-col gap-4">

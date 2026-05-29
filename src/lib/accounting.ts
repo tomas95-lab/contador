@@ -8,7 +8,6 @@ import type {
   TaxPayment,
   UserFiscalProfile,
 } from "@/types/accounting"
-import { taxCategories } from "@/data/accounting"
 
 const numberFormatter = new Intl.NumberFormat("es-AR")
 const compactFormatter = new Intl.NumberFormat("es-AR", {
@@ -269,12 +268,14 @@ export function getFinancialMetrics(
 
 export function getBillingScenario({
   addedAmount,
+  allCategories,
   category,
   payments,
   repeatCount,
   referenceDate = new Date(),
 }: {
   addedAmount: number
+  allCategories: TaxCategory[]
   category: TaxCategory
   payments: IncomePayment[]
   repeatCount: number
@@ -286,8 +287,8 @@ export function getBillingScenario({
   const additionalTotal = normalizedAmount * normalizedRepeatCount
   const annualTotalAfter = metrics.annualTotal + additionalTotal
   const recommendedCategory =
-    taxCategories.find((item) => annualTotalAfter <= item.annualLimit) ??
-    taxCategories[taxCategories.length - 1]
+    allCategories.find((item) => annualTotalAfter <= item.annualLimit) ??
+    allCategories[allCategories.length - 1]
 
   return {
     addedAmount: normalizedAmount,

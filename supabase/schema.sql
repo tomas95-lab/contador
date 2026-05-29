@@ -151,6 +151,14 @@ create table if not exists public.foreign_clients (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.tax_categories (
+  category_key text primary key,
+  annual_limit numeric(14, 2) not null,
+  monthly_tax numeric(14, 2) not null,
+  warning_at numeric(4, 3) not null default 0.85,
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.risk_alerts (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -177,6 +185,7 @@ is 'Encrypted ARCA certificate payload. Stored as pgcrypto ciphertext encoded in
 comment on column public.user_arca_credentials.private_key
 is 'Encrypted ARCA private key payload. Stored as pgcrypto ciphertext encoded in base64 by the backend.';
 
+alter table public.tax_categories enable row level security;
 alter table public.payments enable row level security;
 alter table public.invoices enable row level security;
 alter table public.assistant_messages enable row level security;
@@ -186,6 +195,13 @@ alter table public.tax_payments enable row level security;
 alter table public.user_arca_credentials enable row level security;
 alter table public.foreign_clients enable row level security;
 alter table public.risk_alerts enable row level security;
+
+drop policy if exists "tax_categories_select" on public.tax_categories;
+
+create policy "tax_categories_select"
+on public.tax_categories for select
+to authenticated
+using (true);
 
 drop policy if exists "payments_select" on public.payments;
 drop policy if exists "payments_insert" on public.payments;

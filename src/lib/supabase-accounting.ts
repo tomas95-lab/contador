@@ -1,4 +1,7 @@
-import { currentTaxCategory } from "@/data/accounting"
+import {
+  currentTaxCategory,
+  taxCategories as fallbackTaxCategories,
+} from "@/data/accounting"
 import { supabase } from "@/lib/supabase"
 import type {
   AssistantMessage,
@@ -18,6 +21,7 @@ type InvoiceRow = Database["public"]["Tables"]["invoices"]["Row"]
 type AssistantMessageRow =
   Database["public"]["Tables"]["assistant_messages"]["Row"]
 type TaxSettingsRow = Database["public"]["Tables"]["tax_settings"]["Row"]
+type TaxCategoryRow = Database["public"]["Tables"]["tax_categories"]["Row"]
 type TaxPaymentRow = Database["public"]["Tables"]["tax_payments"]["Row"]
 type UserFiscalProfileRow =
   Database["public"]["Tables"]["user_fiscal_profiles"]["Row"]
@@ -265,6 +269,26 @@ export async function upsertFiscalProfile(profile: UserFiscalProfile) {
   return mapFiscalProfileRow(data)
 }
 
+export async function fetchTaxCategories(): Promise<TaxCategory[]> {
+  assertSupabase()
+
+  const { data, error } = await supabase!
+    .from("tax_categories")
+    .select("*")
+    .order("annual_limit", { ascending: true })
+
+  if (error) {
+    console.warn("Using fallback tax categories", error)
+    return fallbackTaxCategories
+  }
+
+  if (!data || data.length === 0) {
+    return fallbackTaxCategories
+  }
+
+  return data.map(mapTaxCategoryRow)
+}
+
 export async function fetchTaxCategory(): Promise<TaxCategory> {
   assertSupabase()
 
@@ -389,6 +413,15 @@ function mapAssistantMessageRow(row: AssistantMessageRow): AssistantMessage {
 }
 
 function mapTaxSettingsRow(row: TaxSettingsRow): TaxCategory {
+  return {
+    key: row.category_key,
+    annualLimit: Number(row.annual_limit),
+    monthlyTax: Number(row.monthly_tax),
+    warningAt: Number(row.warning_at),
+  }
+}
+
+function mapTaxCategoryRow(row: TaxCategoryRow): TaxCategory {
   return {
     key: row.category_key,
     annualLimit: Number(row.annual_limit),

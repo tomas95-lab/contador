@@ -20,6 +20,7 @@ import {
   currentTaxCategory,
   initialAssistantMessages,
   initialPayments,
+  taxCategories as fallbackTaxCategories,
 } from "@/data/accounting"
 import {
   createDemoInvoiceFromPayment,
@@ -41,6 +42,7 @@ import {
   fetchFiscalProfile,
   fetchInvoices,
   fetchPayments,
+  fetchTaxCategories,
   fetchTaxCategory,
   fetchTaxPayments,
   markPaymentAsInvoiced,
@@ -138,6 +140,8 @@ export default function App() {
     React.useState<UserFiscalProfile>(emptyFiscalProfile)
   const [category, setCategory] =
     React.useState<TaxCategory>(currentTaxCategory)
+  const [allCategories, setAllCategories] =
+    React.useState<TaxCategory[]>(fallbackTaxCategories)
   const [taxPayments, setTaxPayments] = React.useState<TaxPayment[]>([])
   const [taxDueActionMonthKey, setTaxDueActionMonthKey] = React.useState<
     string | null
@@ -161,6 +165,8 @@ export default function App() {
   const arcaCredentialsUserKeyRef = React.useRef<string | null>(null)
   const [dataStatus, setDataStatus] = React.useState<DataStatus>("loading")
   const [unreadAlertCount, setUnreadAlertCount] = React.useState(0)
+  const [isIssuingInvoice, setIsIssuingInvoice] = React.useState(false)
+  const isIssuingInvoiceRef = React.useRef(false)
   const activeMeta = sectionMeta[activeSection]
   const isDemoActive = isDemoSession && authStatus === "authenticated"
   const shouldUseSupabase =
@@ -183,14 +189,26 @@ export default function App() {
 
     setAuthStatus("loading")
 
-    supabase.auth.getSession().then(({ data }) => {
-      if (!mounted) {
-        return
-      }
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        if (!mounted) {
+          return
+        }
 
-      setSession(data.session)
-      setAuthStatus(data.session ? "authenticated" : "anonymous")
-    })
+        setSession(data.session)
+        setAuthStatus(data.session ? "authenticated" : "anonymous")
+      })
+      .catch((error) => {
+        console.error(error)
+
+        if (!mounted) {
+          return
+        }
+
+        setSession(null)
+        setAuthStatus("anonymous")
+      })
 
     const {
       data: { subscription },
@@ -291,11 +309,16 @@ export default function App() {
         return
       }
 
+      setPayments([])
+      setInvoices([])
+      setAssistantMessages([])
+
       try {
         const [
           remotePayments,
           remoteInvoices,
           remoteCategory,
+          remoteAllCategories,
           remoteMessages,
           remoteFiscalProfile,
           remoteTaxPayments,
@@ -303,6 +326,7 @@ export default function App() {
           fetchPayments(),
           fetchInvoices(),
           fetchTaxCategory(),
+          fetchTaxCategories(),
           fetchAssistantMessages(),
           fetchFiscalProfile(),
           fetchTaxPayments(),
@@ -315,6 +339,7 @@ export default function App() {
         setPayments(remotePayments)
         setInvoices(remoteInvoices)
         setCategory(remoteCategory)
+        setAllCategories(remoteAllCategories)
         setFiscalProfile(remoteFiscalProfile)
         setTaxPayments(remoteTaxPayments)
         setAssistantMessages(
@@ -571,26 +596,121 @@ export default function App() {
     payment: IncomePayment,
     options: InvoiceEmissionOptions = {}
   ) {
+    if (isIssuingInvoiceRef.current) {
+      throw new Error("Ya hay una factura en emisión. Esperá a que termine.")
+    }
+
+    isIssuingInvoiceRef.current = true
+    setIsIssuingInvoice(true)
+
     let issuedInvoice: Omit<GeneratedInvoice, "id">
     const invoiceKind = options.invoiceType ?? "C"
 
-    if (isDemoActive) {
-      const issuedInvoice = createDemoInvoiceFromPayment(
-        {
-          ...payment,
-          client: options.clientName ?? payment.client,
-          date: getTodayInputValue(),
-        },
-        invoices.length
-      )
+    try {
+      if (isDemoActive) {
+        const issuedInvoice = createDemoInvoiceFromPayment(
+          {
+            ...payment,
+            client: options.clientName ?? payment.client,
+            date: getTodayInputValue(),
+          },
+          invoices.length
+        )
 
-      if (invoiceKind === "E") {
-        issuedInvoice.invoiceType = "Factura E"
-        issuedInvoice.pointOfSale = 6
-        issuedInvoice.number = `0006-${String(invoices.length + 1).padStart(8, "0")}`
+        if (invoiceKind === "E") {
+          issuedInvoice.invoiceType = "Factura E"
+          issuedInvoice.pointOfSale = 6
+          issuedInvoice.number = `0006-${String(invoices.length + 1).padStart(8, "0")}`
+        }
+
+        setInvoices((current) => [issuedInvoice, ...current])
+        setPayments((current) =>
+          current.map((item) =>
+            item.id === payment.id
+              ? {
+                  ...item,
+                  invoiceStatus: "facturado",
+                }
+              : item
+          )
+        )
+        return
       }
 
-      setInvoices((current) => [issuedInvoice, ...current])
+      try {
+        const arcaInvoice = await emitArcaInvoice({
+          amount: payment.amount,
+          currencyId: options.currencyId,
+          exchangeRate: options.exchangeRate,
+          clientCuit: options.clientCuit,
+          clientName: options.clientName,
+          clientAddress: options.clientAddress,
+          clientTaxId: options.clientTaxId,
+          destinationCountryCode: options.destinationCountryCode,
+          foreignClientCountryCode: options.foreignClientCountryCode,
+          foreignClientTaxId: options.foreignClientTaxId,
+          foreignClientName: options.foreignClientName,
+          foreignClientAddress: options.foreignClientAddress,
+          foreignClientPlatform: options.foreignClientPlatform,
+          description: payment.description,
+          invoiceType: invoiceKind,
+          receiverIvaConditionId: options.receiverIvaConditionId,
+        })
+
+        issuedInvoice = {
+          paymentId: payment.id,
+          number: formatInvoiceNumber(
+            arcaInvoice.invoice.pointOfSale,
+            arcaInvoice.invoice.number
+          ),
+          invoiceType:
+            arcaInvoice.invoice.invoiceType === "E" ? "Factura E" : "Factura C",
+          pointOfSale: arcaInvoice.invoice.pointOfSale,
+          issueDate: arcaInvoice.invoice.date ?? getTodayInputValue(),
+          client: payment.client,
+          description: arcaInvoice.invoice.description,
+          amount: arcaInvoice.invoice.amount,
+          cae: arcaInvoice.cae,
+          caeExpiresAt: arcaInvoice.caeExpiresAt,
+          status: "issued",
+        }
+      } catch (error) {
+        console.error(error)
+        setDataStatus("error")
+        throw error
+      }
+
+      if (shouldUseSupabase) {
+        try {
+          const savedInvoice = await createInvoice(issuedInvoice)
+          const updatedPayment = await markPaymentAsInvoiced(payment.id)
+
+          setInvoices((current) => [savedInvoice, ...current])
+          setPayments((current) =>
+            current.map((item) =>
+              item.id === updatedPayment.id ? updatedPayment : item
+            )
+          )
+          setDataStatus("connected")
+          return
+        } catch (error) {
+          console.error(error)
+          setDataStatus("error")
+          throw new Error(
+            error instanceof Error
+              ? `ARCA emitio la factura ${issuedInvoice.number} con CAE ${issuedInvoice.cae}, pero no se pudo guardar en la app: ${error.message}`
+              : `ARCA emitio la factura ${issuedInvoice.number} con CAE ${issuedInvoice.cae}, pero no se pudo guardar en la app.`
+          )
+        }
+      }
+
+      setInvoices((current) => [
+        {
+          ...issuedInvoice,
+          id: crypto.randomUUID(),
+        },
+        ...current,
+      ])
       setPayments((current) =>
         current.map((item) =>
           item.id === payment.id
@@ -601,93 +721,10 @@ export default function App() {
             : item
         )
       )
-      return
+    } finally {
+      isIssuingInvoiceRef.current = false
+      setIsIssuingInvoice(false)
     }
-
-    try {
-      const arcaInvoice = await emitArcaInvoice({
-        amount: payment.amount,
-        currencyId: options.currencyId,
-        exchangeRate: options.exchangeRate,
-        clientCuit: options.clientCuit,
-        clientName: options.clientName,
-        clientAddress: options.clientAddress,
-        clientTaxId: options.clientTaxId,
-        destinationCountryCode: options.destinationCountryCode,
-        foreignClientCountryCode: options.foreignClientCountryCode,
-        foreignClientTaxId: options.foreignClientTaxId,
-        foreignClientName: options.foreignClientName,
-        foreignClientAddress: options.foreignClientAddress,
-        foreignClientPlatform: options.foreignClientPlatform,
-        description: payment.description,
-        invoiceType: invoiceKind,
-        receiverIvaConditionId: options.receiverIvaConditionId,
-      })
-
-      issuedInvoice = {
-        paymentId: payment.id,
-        number: formatInvoiceNumber(
-          arcaInvoice.invoice.pointOfSale,
-          arcaInvoice.invoice.number
-        ),
-        invoiceType:
-          arcaInvoice.invoice.invoiceType === "E" ? "Factura E" : "Factura C",
-        pointOfSale: arcaInvoice.invoice.pointOfSale,
-        issueDate: arcaInvoice.invoice.date ?? getTodayInputValue(),
-        client: payment.client,
-        description: arcaInvoice.invoice.description,
-        amount: arcaInvoice.invoice.amount,
-        cae: arcaInvoice.cae,
-        caeExpiresAt: arcaInvoice.caeExpiresAt,
-        status: "issued",
-      }
-    } catch (error) {
-      console.error(error)
-      setDataStatus("error")
-      throw error
-    }
-
-    if (shouldUseSupabase) {
-      try {
-        const savedInvoice = await createInvoice(issuedInvoice)
-        const updatedPayment = await markPaymentAsInvoiced(payment.id)
-
-        setInvoices((current) => [savedInvoice, ...current])
-        setPayments((current) =>
-          current.map((item) =>
-            item.id === updatedPayment.id ? updatedPayment : item
-          )
-        )
-        setDataStatus("connected")
-        return
-      } catch (error) {
-        console.error(error)
-        setDataStatus("error")
-        throw new Error(
-          error instanceof Error
-            ? `ARCA emitio la factura ${issuedInvoice.number} con CAE ${issuedInvoice.cae}, pero no se pudo guardar en la app: ${error.message}`
-            : `ARCA emitio la factura ${issuedInvoice.number} con CAE ${issuedInvoice.cae}, pero no se pudo guardar en la app.`
-        )
-      }
-    }
-
-    setInvoices((current) => [
-      {
-        ...issuedInvoice,
-        id: crypto.randomUUID(),
-      },
-      ...current,
-    ])
-    setPayments((current) =>
-      current.map((item) =>
-        item.id === payment.id
-          ? {
-              ...item,
-              invoiceStatus: "facturado",
-            }
-          : item
-      )
-    )
   }
 
   function renderSection() {
@@ -707,6 +744,7 @@ export default function App() {
           <AssistantPanel
             category={category}
             isDemo={isDemoActive}
+            isIssuingInvoice={isIssuingInvoice}
             messages={assistantMessages}
             onAddMessage={addAssistantMessage}
             onClearMessages={clearChat}
@@ -722,6 +760,7 @@ export default function App() {
             category={category}
             isDemo={isDemoActive}
             invoices={invoices}
+            isIssuingInvoice={isIssuingInvoice}
             onGenerateInvoice={generateInvoice}
             payments={payments}
           />
@@ -729,6 +768,7 @@ export default function App() {
       case "proyecciones":
         return (
           <ProjectionsPanel
+            allCategories={allCategories}
             category={category}
             onBack={() => setActiveSection("resumen")}
             payments={payments}
@@ -754,6 +794,7 @@ export default function App() {
       case "resumen":
         return (
           <DashboardView
+            allCategories={allCategories}
             category={category}
             invoices={invoices}
             onMarkTaxDuePaid={markTaxDuePaid}

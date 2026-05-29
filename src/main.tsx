@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client"
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 
 import "./index.css"
+import { ErrorBoundary } from "@/components/error-boundary.tsx"
 import { ThemeProvider } from "@/components/theme-provider.tsx"
 
 const LandingPage = lazy(() => import("./landing/LandingPage.tsx"))
@@ -28,9 +29,11 @@ createRoot(document.getElementById("root")!).render(
           <Route
             path="/app"
             element={
-              <Suspense fallback={<RouteFallback />}>
-                <App />
-              </Suspense>
+              <ErrorBoundary>
+                <Suspense fallback={<RouteFallback />}>
+                  <App />
+                </Suspense>
+              </ErrorBoundary>
             }
           />
           <Route path="*" element={<Navigate replace to="/" />} />
