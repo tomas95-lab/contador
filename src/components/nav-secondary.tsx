@@ -24,7 +24,7 @@ export function NavSecondary({
     icon: React.ReactNode
   }[]
   onSelect: (section: AppSection) => void
-} & React.ComponentPropsWithoutRef<typeof SidebarGroup>) {
+} & Omit<React.ComponentPropsWithoutRef<typeof SidebarGroup>, "onSelect">) {
   return (
     <SidebarGroup {...props}>
       <SidebarGroupContent>
