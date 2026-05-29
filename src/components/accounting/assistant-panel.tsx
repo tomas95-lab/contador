@@ -56,6 +56,7 @@ import type {
 type AssistantPanelProps = {
   payments: IncomePayment[]
   category: TaxCategory
+  isDemo?: boolean
   messages: AssistantMessage[]
   profile: UserFiscalProfile
   onAddMessage: (
@@ -101,6 +102,7 @@ const assistantIntroStorageKey = "contable-assistant-intro-shown"
 export function AssistantPanel({
   payments,
   category,
+  isDemo = false,
   messages,
   onAddMessage,
   onClearMessages,
@@ -253,7 +255,7 @@ export function AssistantPanel({
         return
       }
 
-      if (shouldUseArcaContext(prompt)) {
+      if (shouldUseArcaContext(prompt) && !isDemo) {
         setIsQueryingArca(true)
         try {
           arcaContext = await fetchArcaAssistantContext({ metrics, payments })

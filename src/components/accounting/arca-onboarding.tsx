@@ -2,6 +2,7 @@ import * as React from "react"
 import {
   ArrowRightIcon,
   CheckCircle2Icon,
+  CircleHelpIcon,
   CopyIcon,
   ExternalLinkIcon,
   FileKey2Icon,
@@ -10,6 +11,7 @@ import {
   ShieldCheckIcon,
 } from "lucide-react"
 
+import { HelpView } from "@/components/help-view"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -21,6 +23,13 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import { Textarea } from "@/components/ui/textarea"
 import {
   generateArcaCsr,
@@ -47,7 +56,11 @@ const stepperSteps: { number: OnboardingStep; label: string }[] = [
   { number: 5, label: "Finalizar" },
 ]
 
-export function ArcaOnboarding({ onComplete, onSignOut }: ArcaOnboardingProps) {
+export function ArcaOnboarding({
+  onComplete,
+  onSignOut,
+}: ArcaOnboardingProps) {
+  const [isHelpOpen, setIsHelpOpen] = React.useState(false)
   const [cuit, setCuit] = React.useState("")
   const [csr, setCsr] = React.useState("")
   const [certificate, setCertificate] = React.useState("")
@@ -158,16 +171,40 @@ export function ArcaOnboarding({ onComplete, onSignOut }: ArcaOnboardingProps) {
                 la app para guardar la conexión.
               </p>
             </div>
-            <Button
-              className="border-[#B5D4F4] bg-background/80 text-[#0C447C] hover:bg-background dark:border-[#B5D4F4]/40 dark:bg-background/10 dark:text-[#E6F1FB] dark:hover:bg-background/20"
-              onClick={onSignOut}
-              type="button"
-              variant="outline"
-            >
-              Salir
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                className="bg-[#185FA5] text-white hover:bg-[#0C447C]"
+                onClick={() => setIsHelpOpen(true)}
+                type="button"
+              >
+                <CircleHelpIcon />
+                Ayuda
+              </Button>
+              <Button
+                className="border-[#B5D4F4] bg-background/80 text-[#0C447C] hover:bg-background dark:border-[#B5D4F4]/40 dark:bg-background/10 dark:text-[#E6F1FB] dark:hover:bg-background/20"
+                onClick={onSignOut}
+                type="button"
+                variant="outline"
+              >
+                Salir
+              </Button>
+            </div>
           </div>
         </header>
+
+        <Sheet onOpenChange={setIsHelpOpen} open={isHelpOpen}>
+          <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:!max-w-xl md:!max-w-2xl">
+            <SheetHeader className="border-b px-6 py-5 pr-14">
+              <SheetTitle>Ayuda con el onboarding ARCA</SheetTitle>
+              <SheetDescription>
+                Contanos en qué paso te trabaste y te respondemos a la brevedad.
+              </SheetDescription>
+            </SheetHeader>
+            <div className="px-6 py-5">
+              <HelpView context="onboarding" layout="stacked" />
+            </div>
+          </SheetContent>
+        </Sheet>
 
         <Stepper currentStep={currentStep} />
 
@@ -560,6 +597,27 @@ export function ArcaOnboarding({ onComplete, onSignOut }: ArcaOnboardingProps) {
                     </div>
                   )
                 })}
+              </CardContent>
+            </Card>
+
+            <Card className="overflow-hidden rounded-xl border-[#B5D4F4] shadow-none dark:border-[#185FA5]/60">
+              <CardHeader className="bg-[#E6F1FB] pb-3 dark:bg-[#0C447C]/35">
+                <CardTitle className="text-base text-[#0C447C] dark:text-[#E6F1FB]">
+                  ¿Necesitás ayuda?
+                </CardTitle>
+                <CardDescription className="text-[#0C447C]/75 dark:text-[#E6F1FB]/75">
+                  Si te trabaste en algún paso, escribinos y te guiamos.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-4">
+                <Button
+                  className="w-full bg-[#185FA5] text-white hover:bg-[#0C447C]"
+                  onClick={() => setIsHelpOpen(true)}
+                  type="button"
+                >
+                  <CircleHelpIcon />
+                  Pedir ayuda
+                </Button>
               </CardContent>
             </Card>
 

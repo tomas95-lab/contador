@@ -82,6 +82,7 @@ const data = {
 
 type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
   activeSection: AppSection
+  isDemo?: boolean
   onSectionChange: (section: AppSection) => void
   onSignOut: () => void
   unreadAlertCount?: number
@@ -94,6 +95,7 @@ type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
 
 export function AppSidebar({
   activeSection,
+  isDemo = false,
   onSectionChange,
   onSignOut,
   unreadAlertCount = 0,
@@ -145,7 +147,7 @@ export function AppSidebar({
         />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser onSignOut={onSignOut} user={user} />
+        <NavUser isDemo={isDemo} onSignOut={onSignOut} user={user} />
       </SidebarFooter>
     </Sidebar>
   )

@@ -37,6 +37,7 @@ import {
   sortInvoicesByDate,
   sumPayments,
 } from "@/lib/accounting"
+import { createDemoArcaAnnualSummary } from "@/data/demo"
 import { fetchArcaAnnualSummary, type ArcaAnnualSummary } from "@/lib/arca-api"
 import {
   fetchForeignClients,
@@ -51,6 +52,7 @@ import type {
 
 type InvoicingPanelProps = {
   category: TaxCategory
+  isDemo?: boolean
   invoices: GeneratedInvoice[]
   onGenerateInvoice: (
     payment: IncomePayment,
@@ -109,6 +111,7 @@ const platformOptions = [
 
 export function InvoicingPanel({
   category,
+  isDemo = false,
   invoices,
   onGenerateInvoice,
   payments,
@@ -171,6 +174,13 @@ export function InvoicingPanel({
   const metrics = getFinancialMetrics(payments, category)
 
   React.useEffect(() => {
+    if (isDemo) {
+      setArcaSummary(createDemoArcaAnnualSummary(invoices, currentYear))
+      setArcaError("")
+      setIsSyncingArca(false)
+      return
+    }
+
     let cancelled = false
 
     async function syncArcaSummary() {
@@ -203,9 +213,13 @@ export function InvoicingPanel({
     return () => {
       cancelled = true
     }
-  }, [currentYear])
+  }, [currentYear, invoices, isDemo])
 
   React.useEffect(() => {
+    if (isDemo) {
+      return
+    }
+
     let cancelled = false
 
     async function loadForeignClients() {
@@ -225,10 +239,16 @@ export function InvoicingPanel({
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [isDemo])
 
   async function handleFetchArcaSummary() {
     if (isSyncingArca) {
+      return
+    }
+
+    if (isDemo) {
+      setArcaSummary(createDemoArcaAnnualSummary(invoices, currentYear))
+      setArcaError("")
       return
     }
 
@@ -774,7 +794,9 @@ export function InvoicingPanel({
               WSFE
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Produccion activa. Punto de venta 4.
+              {isDemo
+                ? "Modo demo. Punto de venta 5 simulado."
+                : "Produccion activa. Punto de venta 4."}
             </p>
           </div>
           {arcaSummary ? (

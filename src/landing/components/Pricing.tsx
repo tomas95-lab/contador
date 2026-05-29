@@ -17,8 +17,8 @@ type PricingProps = {
 const plans = [
   {
     name: "Plan Simple",
-    price: "$12.000 ARS/mes",
-    badge: null,
+    price: "$15.000 ARS/mes",
+    badge: "Más popular",
     features: [
       "Facturación C conectada a ARCA",
       "Radar de categoría con proyección",
@@ -28,8 +28,8 @@ const plans = [
   },
   {
     name: "Plan Exportador",
-    price: "$15.000 ARS/mes",
-    badge: "Más popular",
+    price: "$18.000 ARS/mes",
+    badge: null,
     features: [
       "Todo lo del plan Simple",
       "Factura E Pro para cobros en USD",

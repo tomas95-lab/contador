@@ -27,7 +27,7 @@ export function CtaFinal({ onOpenWaitlist }: CtaFinalProps) {
           <ArrowRight className="size-4" />
         </Button>
         <div className="mt-8 flex flex-wrap justify-center gap-5 text-sm text-blue-50">
-          {["14 días gratis", "Sin tarjeta", "Soporte argentino"].map(
+          {["30 días gratis", "Sin tarjeta", "Soporte argentino"].map(
             (item) => (
               <div className="flex items-center gap-2" key={item}>
                 <CheckCircle2 className="size-4 text-[#B7F7D5]" />

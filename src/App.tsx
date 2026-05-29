@@ -21,6 +21,11 @@ import {
   initialAssistantMessages,
   initialPayments,
 } from "@/data/accounting"
+import {
+  createDemoInvoiceFromPayment,
+  demoUser,
+  getDemoSessionState,
+} from "@/data/demo"
 import { getTodayInputValue } from "@/lib/accounting"
 import { emitArcaInvoice } from "@/lib/arca-api"
 import { fetchArcaCredentialsStatus } from "@/lib/arca-credentials-api"
@@ -257,12 +262,17 @@ export default function App() {
 
     async function loadSupabaseData() {
       if (isDemoActive) {
-        setPayments(initialPayments)
-        setInvoices([])
-        setAssistantMessages(initialAssistantMessages)
-        setFiscalProfile(emptyFiscalProfile)
-        setTaxPayments([])
-        setDataStatus("demo")
+        const demoState = getDemoSessionState()
+        setPayments(demoState.payments)
+        setInvoices(demoState.invoices)
+        setCategory(demoState.category)
+        setAssistantMessages(demoState.assistantMessages)
+        setFiscalProfile(demoState.fiscalProfile)
+        setTaxPayments(demoState.taxPayments)
+        setConnectedArcaCuit(demoState.arcaCuit)
+        arcaCredentialsStatusRef.current = "configured"
+        setArcaCredentialsStatus("configured")
+        setDataStatus("connected")
         return
       }
 
@@ -351,18 +361,23 @@ export default function App() {
   }
 
   function startDemoSession() {
+    const demoState = getDemoSessionState()
     setStoredDemoSession(true)
     setIsDemoSession(true)
     setSession(null)
     setAuthStatus("authenticated")
-    setDataStatus("demo")
-    setPayments(initialPayments)
-    setInvoices([])
-    setAssistantMessages(initialAssistantMessages)
-    setFiscalProfile(emptyFiscalProfile)
-    setTaxPayments([])
+    setDataStatus("connected")
+    setPayments(demoState.payments)
+    setInvoices(demoState.invoices)
+    setCategory(demoState.category)
+    setAssistantMessages(demoState.assistantMessages)
+    setFiscalProfile(demoState.fiscalProfile)
+    setTaxPayments(demoState.taxPayments)
     setUnreadAlertCount(0)
-    setConnectedArcaCuit(null)
+    setStoredArcaCuit(demoState.arcaCuit)
+    setConnectedArcaCuit(demoState.arcaCuit)
+    arcaCredentialsStatusRef.current = "configured"
+    setArcaCredentialsStatus("configured")
     setActiveSection("resumen")
   }
 
@@ -560,19 +575,19 @@ export default function App() {
     const invoiceKind = options.invoiceType ?? "C"
 
     if (isDemoActive) {
-      const issuedInvoice: GeneratedInvoice = {
-        amount: payment.amount,
-        cae: "DEMO",
-        caeExpiresAt: getTodayInputValue(),
-        client: options.clientName ?? payment.client,
-        description: payment.description,
-        id: crypto.randomUUID(),
-        invoiceType: invoiceKind === "E" ? "Factura E" : "Factura C",
-        issueDate: getTodayInputValue(),
-        number: `DEMO-${String(invoices.length + 1).padStart(4, "0")}`,
-        paymentId: payment.id,
-        pointOfSale: 0,
-        status: "issued",
+      const issuedInvoice = createDemoInvoiceFromPayment(
+        {
+          ...payment,
+          client: options.clientName ?? payment.client,
+          date: getTodayInputValue(),
+        },
+        invoices.length
+      )
+
+      if (invoiceKind === "E") {
+        issuedInvoice.invoiceType = "Factura E"
+        issuedInvoice.pointOfSale = 6
+        issuedInvoice.number = `0006-${String(invoices.length + 1).padStart(8, "0")}`
       }
 
       setInvoices((current) => [issuedInvoice, ...current])
@@ -691,6 +706,7 @@ export default function App() {
         return (
           <AssistantPanel
             category={category}
+            isDemo={isDemoActive}
             messages={assistantMessages}
             onAddMessage={addAssistantMessage}
             onClearMessages={clearChat}
@@ -704,6 +720,7 @@ export default function App() {
         return (
           <InvoicingPanel
             category={category}
+            isDemo={isDemoActive}
             invoices={invoices}
             onGenerateInvoice={generateInvoice}
             payments={payments}
@@ -725,7 +742,7 @@ export default function App() {
         return (
           <SettingsView
             arcaCuit={connectedArcaCuit}
-            arcaStatus={arcaCredentialsStatus}
+            arcaStatus={isDemoActive ? "configured" : arcaCredentialsStatus}
             onOpenFiscalProfile={() => setActiveSection("asistente")}
             onReconnectArca={handleReconnectArca}
             onSignOut={() => void handleSignOut()}
@@ -770,13 +787,15 @@ export default function App() {
   }
 
   const userEmail = isDemoActive
-    ? "demo@contable.app"
+    ? demoUser.email
     : (session?.user.email ?? "local@contable.app")
-  const sidebarUser = {
-    name: userEmail.split("@")[0] || "Usuario",
-    email: userEmail,
-    avatar: "",
-  }
+  const sidebarUser = isDemoActive
+    ? demoUser
+    : {
+        name: userEmail.split("@")[0] || "Usuario",
+        email: userEmail,
+        avatar: "",
+      }
 
   if (shouldUseSupabase && arcaCredentialsStatus === "loading") {
     return (
@@ -831,6 +850,7 @@ export default function App() {
     >
       <AppSidebar
         activeSection={activeSection}
+        isDemo={isDemoActive}
         onSectionChange={setActiveSection}
         onSignOut={() => void handleSignOut()}
         unreadAlertCount={unreadAlertCount}
