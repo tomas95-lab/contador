@@ -16,6 +16,7 @@ import { SettingsView } from "@/components/settings-view"
 import { SiteHeader } from "@/components/site-header"
 import { Button } from "@/components/ui/button"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   currentTaxCategory,
   initialAssistantMessages,
@@ -167,10 +168,12 @@ export default function App() {
   const [unreadAlertCount, setUnreadAlertCount] = React.useState(0)
   const [isIssuingInvoice, setIsIssuingInvoice] = React.useState(false)
   const isIssuingInvoiceRef = React.useRef(false)
+  const loadedDataUserKeyRef = React.useRef<string | null>(null)
   const activeMeta = sectionMeta[activeSection]
   const isDemoActive = isDemoSession && authStatus === "authenticated"
+  const sessionUserKey = getSessionUserKey(session)
   const shouldUseSupabase =
-    isSupabaseConfigured && Boolean(session) && !isDemoActive
+    isSupabaseConfigured && Boolean(sessionUserKey) && !isDemoActive
 
   React.useEffect(() => {
     if (isDemoSession) {
@@ -212,9 +215,29 @@ export default function App() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
-      setAuthStatus(session ? "authenticated" : "anonymous")
+    } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (event === "SIGNED_OUT") {
+        loadedDataUserKeyRef.current = null
+        setSession(null)
+        setAuthStatus("anonymous")
+        return
+      }
+
+      if (event !== "SIGNED_IN") {
+        return
+      }
+
+      setAuthStatus(nextSession ? "authenticated" : "anonymous")
+      setSession((currentSession) => {
+        const currentUserKey = getSessionUserKey(currentSession)
+        const nextUserKey = getSessionUserKey(nextSession)
+
+        if (currentUserKey && nextUserKey && currentUserKey === nextUserKey) {
+          return currentSession
+        }
+
+        return nextSession
+      })
     })
 
     return () => {
@@ -234,7 +257,7 @@ export default function App() {
         return
       }
 
-      const userKey = session?.user.id ?? session?.user.email ?? "authenticated"
+      const userKey = sessionUserKey ?? "authenticated"
 
       if (
         arcaCredentialsUserKeyRef.current === userKey &&
@@ -273,7 +296,7 @@ export default function App() {
     return () => {
       cancelled = true
     }
-  }, [shouldUseSupabase, session?.user.email, session?.user.id])
+  }, [sessionUserKey, shouldUseSupabase])
 
   React.useEffect(() => {
     let cancelled = false
@@ -295,17 +318,23 @@ export default function App() {
       }
 
       if (!isSupabaseConfigured) {
+        loadedDataUserKeyRef.current = null
         setDataStatus("local")
         return
       }
 
-      if (!session || !shouldUseSupabase) {
+      if (!sessionUserKey || !shouldUseSupabase) {
+        loadedDataUserKeyRef.current = null
         setPayments([])
         setInvoices([])
         setAssistantMessages([])
         setFiscalProfile(emptyFiscalProfile)
         setTaxPayments([])
         setDataStatus("loading")
+        return
+      }
+
+      if (loadedDataUserKeyRef.current === sessionUserKey) {
         return
       }
 
@@ -345,6 +374,7 @@ export default function App() {
         setAssistantMessages(
           remoteMessages.length > 0 ? remoteMessages : initialAssistantMessages
         )
+        loadedDataUserKeyRef.current = sessionUserKey
         setDataStatus("connected")
       } catch (error) {
         console.error(error)
@@ -360,7 +390,7 @@ export default function App() {
     return () => {
       cancelled = true
     }
-  }, [isDemoActive, session, shouldUseSupabase])
+  }, [isDemoActive, sessionUserKey, shouldUseSupabase])
 
   async function handleSignOut() {
     if (shouldUseSupabase) {
@@ -373,6 +403,7 @@ export default function App() {
     setAuthStatus("anonymous")
     arcaCredentialsStatusRef.current = null
     arcaCredentialsUserKeyRef.current = null
+    loadedDataUserKeyRef.current = null
     setStoredArcaCuit(null)
     setConnectedArcaCuit(null)
     setArcaCredentialsStatus("loading")
@@ -391,6 +422,7 @@ export default function App() {
     setIsDemoSession(true)
     setSession(null)
     setAuthStatus("authenticated")
+    loadedDataUserKeyRef.current = null
     setDataStatus("connected")
     setPayments(demoState.payments)
     setInvoices(demoState.invoices)
@@ -728,6 +760,14 @@ export default function App() {
   }
 
   function renderSection() {
+    if (dataStatus === "loading") {
+      return activeSection === "resumen" ? (
+        <DashboardLoadingSkeleton />
+      ) : (
+        <SectionLoadingSpinner />
+      )
+    }
+
     switch (activeSection) {
       case "cobros":
         return (
@@ -912,6 +952,85 @@ export default function App() {
       </SidebarInset>
     </SidebarProvider>
   )
+}
+
+function DashboardLoadingSkeleton() {
+  return (
+    <div className="flex flex-col gap-4 md:gap-6" aria-busy="true">
+      <div className="rounded-lg border bg-card p-6 shadow-none">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-3">
+            <Skeleton className="h-6 w-28 rounded-full" />
+            <div className="space-y-2">
+              <Skeleton className="h-6 w-44" />
+              <Skeleton className="h-4 w-72 max-w-full" />
+            </div>
+          </div>
+          <div className="min-w-36 rounded-lg border bg-background/70 p-3">
+            <Skeleton className="ml-auto h-3 w-20" />
+            <Skeleton className="mt-3 ml-auto h-9 w-24" />
+          </div>
+        </div>
+        <div className="mt-6 space-y-2">
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-4 w-14" />
+          </div>
+          <Skeleton className="h-3 w-full rounded-full" />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div
+            className="rounded-lg border bg-card p-5 shadow-none"
+            key={index}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-3">
+                <Skeleton className="h-7 w-32" />
+                <Skeleton className="h-4 w-28" />
+              </div>
+              <Skeleton className="h-7 w-16 rounded-full" />
+            </div>
+            <div className="mt-6 space-y-2">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-3/4" />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
+        <div className="rounded-lg border bg-card p-6 shadow-none">
+          <div className="mb-6 space-y-2">
+            <Skeleton className="h-6 w-44" />
+            <Skeleton className="h-4 w-28" />
+          </div>
+          <Skeleton className="h-[260px] w-full rounded-lg" />
+        </div>
+        <div className="hidden flex-col gap-4 lg:flex">
+          <Skeleton className="h-44 w-full rounded-lg" />
+          <Skeleton className="h-36 w-full rounded-lg" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SectionLoadingSpinner() {
+  return (
+    <div
+      className="flex min-h-[320px] items-center justify-center"
+      aria-busy="true"
+    >
+      <div className="size-8 animate-spin rounded-full border-2 border-muted border-t-primary" />
+    </div>
+  )
+}
+
+function getSessionUserKey(session: Session | null) {
+  return session?.user.id ?? session?.user.email ?? null
 }
 
 function formatInvoiceNumber(pointOfSale: number, number: number) {
