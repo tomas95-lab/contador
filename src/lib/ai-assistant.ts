@@ -1,10 +1,5 @@
 import type { FinancialMetrics } from "@/lib/accounting"
-import {
-  formatARS,
-  formatFiscalPeriodRange,
-  formatPercent,
-  getNextMonotributoDueDate,
-} from "@/lib/accounting"
+import { getNextMonotributoDueDate } from "@/lib/accounting"
 import { supabase } from "@/lib/supabase"
 import type {
   AssistantMessage,
@@ -49,62 +44,38 @@ export async function requestAssistantReply({
   profile,
   riskSnapshot,
 }: AssistantPayload) {
-  if (supabase) {
-    try {
-      const { data, error } =
-        await supabase.functions.invoke<AssistantResponse>("claude-chat", {
-          body: {
-            arcaContext,
-            content,
-            metrics,
-            profile,
-            riskSnapshot,
-            messages: messages.map((message) => ({
-              role: message.role,
-              content: message.content,
-            })),
-          },
-        })
-
-      if (!error && data?.message) {
-        return data.message
-      }
-    } catch (error) {
-      console.error(error)
-    }
+  if (!supabase) {
+    return "No pudimos conectar con Conta. Verificá la configuración de Supabase y volvé a intentarlo."
   }
 
-  const endpoint = import.meta.env.VITE_CLAUDE_ASSISTANT_ENDPOINT
-
-  if (endpoint) {
-    try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+  try {
+    const { data, error } =
+      await supabase.functions.invoke<AssistantResponse>("claude-chat", {
+        body: {
           arcaContext,
           content,
           metrics,
           profile,
           riskSnapshot,
-        }),
+          messages: messages.map((message) => ({
+            role: message.role,
+            content: message.content,
+          })),
+        },
       })
 
-      if (response.ok) {
-        const data = (await response.json()) as AssistantResponse
-
-        if (data.message) {
-          return data.message
-        }
-      }
-    } catch (error) {
-      console.error(error)
+    if (error) {
+      throw error
     }
+
+    if (data?.message) {
+      return data.message
+    }
+  } catch (error) {
+    console.error(error)
   }
 
-  return buildLocalReply({ content, metrics, profile, riskSnapshot })
+  return "No pudimos consultar a Conta en este momento. Verificá tu conexión y volvé a intentarlo."
 }
 
 export function buildRiskSnapshot(
@@ -143,102 +114,4 @@ export function getRiskLevel(metrics: FinancialMetrics): RiskLevel {
   }
 
   return "BAJO"
-}
-
-function buildLocalReply({
-  content,
-  metrics,
-  profile,
-  riskSnapshot,
-}: {
-  content: string
-  metrics: FinancialMetrics
-  profile?: UserFiscalProfile
-  riskSnapshot?: RiskSnapshot
-}) {
-  const normalized = normalizeText(content)
-  const userContext = profile?.activity
-    ? `Para tu actividad de ${profile.activity},`
-    : "Con los datos cargados,"
-
-  if (isStatusQuestion(normalized)) {
-    return buildLocalDiagnosis(metrics, riskSnapshot)
-  }
-
-  if (/cripto|crypto|usdt|btc|ethereum/.test(normalized)) {
-    return `${userContext} trataría cripto como caso especial: separar fecha de cobro, valor en pesos de referencia, exchange o wallet usada y facturas. Antes de facturar, conviene revisar si corresponde declararlo como ingreso por servicio, diferencia de cambio o tenencia, porque cambia el encuadre.`
-  }
-
-  if (
-    /exterior|export|invoice|factura e|cliente afuera|usd|dolar/.test(
-      normalized
-    )
-  ) {
-    return `${userContext} una factura al exterior necesita mirar moneda, tipo de factura, país del cliente, concepto exportado y liquidación de divisas. Si ya cobraste, cruzá el importe con ARCA y dejá trazado el tipo de cambio usado.`
-  }
-
-  if (/relacion de dependencia|dependencia|sueldo|empleado/.test(normalized)) {
-    return `${userContext} al combinar relación de dependencia y monotributo hay que separar ingresos: sueldo por un lado, facturación independiente por otro. El límite de categoría se mira sobre la actividad monotributista, pero ganancias, obra social y aportes pueden requerir revisión aparte.`
-  }
-
-  if (metrics.annualLimitRemaining <= 0) {
-    return `El acumulado del período ${formatFiscalPeriodRange(
-      metrics.evaluationPeriod
-    )} ya supera el límite por ${formatARS(
-      Math.abs(metrics.annualLimitRemaining)
-    )}. Conviene revisar recategorización y facturación pendiente.`
-  }
-
-  if (metrics.annualUsage >= 0.85) {
-    return `Estás usando ${formatPercent(
-      metrics.annualUsage
-    )} del límite para ${metrics.evaluationPeriod.recategorizationLabel}. Te quedan ${formatARS(
-      metrics.annualLimitRemaining
-    )}; mirá cualquier cobro nuevo antes de facturarlo.`
-  }
-
-  return `${userContext} el mes viene en ${formatARS(
-    metrics.currentMonthRevenue
-  )}. El margen del período ${formatFiscalPeriodRange(
-    metrics.evaluationPeriod
-  )} es ${formatARS(metrics.annualLimitRemaining)}.`
-}
-
-function buildLocalDiagnosis(
-  metrics: FinancialMetrics,
-  riskSnapshot?: RiskSnapshot
-) {
-  const riskLevel = riskSnapshot?.riskLevel ?? getRiskLevel(metrics)
-  const usage = riskSnapshot
-    ? `${riskSnapshot.categoryUsagePercent}%`
-    : formatPercent(metrics.annualUsage)
-  const alert = riskSnapshot?.activeAlerts[0]
-  const breachText =
-    riskSnapshot?.daysUntilBreach !== null &&
-    riskSnapshot?.daysUntilBreach !== undefined
-      ? ` Si seguís igual, la fecha estimada de tope aparece en ${riskSnapshot.daysUntilBreach} días.`
-      : ""
-
-  return [
-    `Situación actual: venís usando ${usage} del límite del período ${formatFiscalPeriodRange(
-      metrics.evaluationPeriod
-    )}. Te quedan ${formatARS(metrics.annualLimitRemaining)} de margen.`,
-    `Riesgo: ${riskLevel}.${breachText}${
-      alert ? ` Alerta activa principal: ${alert.title}.` : ""
-    }`,
-    "Acción concreta: revisá cobros pendientes antes de facturar y simulá cualquier ingreso grande antes de aceptarlo.",
-  ].join("\n\n")
-}
-
-function isStatusQuestion(normalized: string) {
-  return /^(hola|buenas|como estoy|cómo estoy|que ves|qué ves|resumen|diagnostico|diagnóstico|estado)/.test(
-    normalized
-  )
-}
-
-function normalizeText(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase()
 }

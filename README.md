@@ -166,7 +166,6 @@ Nunca commitear `.env.local`, certificados, private keys, service role keys ni t
 | `VITE_SUPABASE_ANON_KEY`         | Si        | `<SUPABASE_ANON_KEY>`               | Clave anon/public para inicializar Supabase JS en el navegador.   |
 | `VITE_ARCA_API_URL`              | Si        | `http://localhost:3001`             | URL del backend Express. En produccion apunta a Render.           |
 | `VITE_CONTA_CUIT`                | No        | `XX-XXXXXXXX-X`                     | CUIT visible de referencia en pantallas de onboarding.            |
-| `VITE_CLAUDE_ASSISTANT_ENDPOINT` | No        | `https://<host>/assistant`          | Fallback HTTP para Conta si no se usa Supabase Functions.         |
 | `VITE_ARCA_WSFE_POINTS`          | No        | `4,5`                               | Puntos de venta WSFE a consultar desde el cliente. Default: `4`.  |
 | `VITE_ARCA_WSFEX_POINTS`         | No        | `3`                                 | Puntos de venta WSFEX a consultar desde el cliente. Default: `3`. |
 
