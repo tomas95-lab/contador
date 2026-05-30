@@ -1,38 +1,32 @@
-"use client"
-
 import * as React from "react"
-import { Loader2Icon, PlayCircleIcon, ReceiptTextIcon } from "lucide-react"
+import { Loader2Icon, PlayCircleIcon } from "lucide-react"
 
+import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
 import {
   Field,
   FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
+  FieldSeparator,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { signInWithEmail, signUpWithEmail } from "@/lib/supabase-auth"
-import { cn } from "@/lib/utils"
 
 type AuthMode = "login" | "signup"
+
+type LoginFormProps = React.ComponentProps<"form"> & {
+  canUseEmailAuth: boolean
+  onUseDemo: () => void
+}
 
 export function LoginForm({
   canUseEmailAuth,
   className,
   onUseDemo,
   ...props
-}: React.ComponentProps<"div"> & {
-  canUseEmailAuth: boolean
-  onUseDemo: () => void
-}) {
+}: LoginFormProps) {
   const [email, setEmail] = React.useState("")
   const [error, setError] = React.useState("")
   const [message, setMessage] = React.useState("")
@@ -57,7 +51,6 @@ export function LoginForm({
         await signInWithEmail(email, password)
       } else {
         const data = await signUpWithEmail(email, password)
-
         if (!data.session) {
           setMessage("Cuenta creada. Revisá tu email para confirmar el acceso.")
           setMode("login")
@@ -75,100 +68,96 @@ export function LoginForm({
   }
 
   return (
-    <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <Card className="rounded-lg shadow-none">
-        <CardHeader>
-          <div className="mb-2 flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <ReceiptTextIcon className="size-4" />
-          </div>
-          <CardTitle>
-            {mode === "login" ? "Entrar a contable." : "Crear cuenta"}
-          </CardTitle>
-          <CardDescription>
+    <form
+      className={cn("flex flex-col gap-6", className)}
+      onSubmit={handleSubmit}
+      {...props}
+    >
+      <FieldGroup>
+        <div className="flex flex-col items-center gap-1 text-center">
+          <h1 className="text-2xl font-bold">
+            {mode === "login" ? "Bienvenido de nuevo" : "Crear cuenta"}
+          </h1>
+          <p className="text-balance text-sm text-muted-foreground">
             {mode === "login"
-              ? "Usa tu email para acceder a tus cobros, facturas y chat."
-              : "Crea tu acceso para guardar tus datos en Supabase."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit}>
-            <FieldGroup>
-              <Field>
-                <FieldLabel htmlFor="email">Email</FieldLabel>
-                <Input
-                  autoComplete="email"
-                  id="email"
-                  onChange={(event) => setEmail(event.target.value)}
-                  placeholder="tu@email.com"
-                  required
-                  type="email"
-                  value={email}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="password">Clave</FieldLabel>
-                <Input
-                  autoComplete={
-                    mode === "login" ? "current-password" : "new-password"
-                  }
-                  id="password"
-                  minLength={6}
-                  onChange={(event) => setPassword(event.target.value)}
-                  required
-                  type="password"
-                  value={password}
-                />
-              </Field>
-              {error && <FieldError>{error}</FieldError>}
-              {message && (
-                <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
-                  {message}
-                </p>
-              )}
-              <Field>
-                <Button disabled={isPending} type="submit">
-                  {isPending && <Loader2Icon className="animate-spin" />}
-                  {mode === "login" ? "Entrar" : "Crear cuenta"}
-                </Button>
-                <FieldDescription className="text-center">
-                  {mode === "login" ? "¿No tenés cuenta?" : "¿Ya tenés cuenta?"}{" "}
-                  <button
-                    className="font-medium"
-                    onClick={() =>
-                      setMode((current) =>
-                        current === "login" ? "signup" : "login"
-                      )
-                    }
-                    type="button"
-                  >
-                    {mode === "login" ? "Registrate" : "Iniciar sesión"}
-                  </button>
-                </FieldDescription>
-              </Field>
-            </FieldGroup>
-          </form>
-          <div className="mt-6 space-y-3">
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              <span className="h-px flex-1 bg-border" />
-              <span>o</span>
-              <span className="h-px flex-1 bg-border" />
-            </div>
-            <Button
-              className="w-full"
-              disabled={isPending}
-              onClick={onUseDemo}
-              type="button"
-              variant="outline"
-            >
-              <PlayCircleIcon />
-              Entrar con demo
-            </Button>
-            <p className="text-center text-xs text-muted-foreground">
-              Usá datos de ejemplo sin crear cuenta.
-            </p>
+              ? "Ingresá tu email para acceder a tu cuenta."
+              : "Completá los datos para empezar."}
+          </p>
+        </div>
+
+        <Field>
+          <FieldLabel htmlFor="email">Email</FieldLabel>
+          <Input
+            autoComplete="email"
+            className="bg-background"
+            id="email"
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="tu@email.com"
+            required
+            type="email"
+            value={email}
+          />
+        </Field>
+
+        <Field>
+          <div className="flex items-center">
+            <FieldLabel htmlFor="password">Contraseña</FieldLabel>
           </div>
-        </CardContent>
-      </Card>
-    </div>
+          <Input
+            autoComplete={mode === "login" ? "current-password" : "new-password"}
+            className="bg-background"
+            id="password"
+            minLength={6}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            type="password"
+            value={password}
+          />
+        </Field>
+
+        {error ? <FieldError>{error}</FieldError> : null}
+        {message ? (
+          <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
+            {message}
+          </p>
+        ) : null}
+
+        <Field>
+          <Button disabled={isPending} type="submit">
+            {isPending ? <Loader2Icon className="animate-spin" /> : null}
+            {mode === "login" ? "Entrar" : "Crear cuenta"}
+          </Button>
+          <FieldDescription className="text-center">
+            {mode === "login" ? "¿No tenés cuenta?" : "¿Ya tenés cuenta?"}{" "}
+            <button
+              className="font-medium underline underline-offset-4"
+              onClick={() =>
+                setMode((m) => (m === "login" ? "signup" : "login"))
+              }
+              type="button"
+            >
+              {mode === "login" ? "Registrate" : "Iniciá sesión"}
+            </button>
+          </FieldDescription>
+        </Field>
+
+        <FieldSeparator>o</FieldSeparator>
+
+        <Field>
+          <Button
+            disabled={isPending}
+            onClick={onUseDemo}
+            type="button"
+            variant="outline"
+          >
+            <PlayCircleIcon />
+            Explorar con datos de demo
+          </Button>
+          <FieldDescription className="text-center">
+            Probá la app sin crear cuenta.
+          </FieldDescription>
+        </Field>
+      </FieldGroup>
+    </form>
   )
 }

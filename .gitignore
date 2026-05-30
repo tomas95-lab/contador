@@ -28,7 +28,7 @@ coverage/
 certs/
 server/certs/
 .arca-cache/
-
+*.md
 # Logs and local runtime files
 logs/
 *.log

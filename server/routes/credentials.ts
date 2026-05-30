@@ -10,7 +10,7 @@ import {
   type UserArcaCredentials,
 } from "../lib/arca-credentials.js"
 
-const TEMPORARY_PRIVATE_KEY_TTL_MS = 10 * 60 * 1000
+const TEMPORARY_PRIVATE_KEY_TTL_MS = 4 * 60 * 60 * 1000
 
 type PendingPrivateKey = {
   cuit: string
@@ -27,7 +27,7 @@ const generateCsrSchema = z.object({
 const saveCredentialsSchema = z.object({
   certificate: z.string().trim().min(1),
   wsfe_pto_vta: z.coerce.number().int().positive(),
-  wsfex_pto_vta: z.coerce.number().int().positive(),
+  wsfex_pto_vta: z.coerce.number().int().min(0).default(0),
 })
 
 export async function getArcaCredentialsStatus(
@@ -130,7 +130,7 @@ function getPendingPrivateKey(userId: string) {
   if (!pending || pending.expiresAt <= Date.now()) {
     pendingPrivateKeys.delete(userId)
     throw new ArcaError(
-      "Volvé a generar el código de autorización antes de subir el certificado.",
+      "El código de autorización venció (son válidos por 4 horas). Volvé al paso 1, generá uno nuevo y repetí el trámite en ARCA.",
       400
     )
   }
