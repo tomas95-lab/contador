@@ -1,19 +1,27 @@
 import * as React from "react"
 import {
+  AlertTriangleIcon,
   ArrowRightIcon,
   CheckCircle2Icon,
-  ChevronDownIcon,
   CircleHelpIcon,
   Clock3Icon,
   CopyIcon,
   ExternalLinkIcon,
   FileKey2Icon,
   FileUpIcon,
+  InfoIcon,
   Loader2Icon,
   ShieldCheckIcon,
 } from "lucide-react"
 
 import { HelpView } from "@/components/help-view"
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -26,6 +34,7 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Progress } from "@/components/ui/progress"
 import {
   Sheet,
   SheetContent,
@@ -76,6 +85,7 @@ export function ArcaOnboarding({
   const [hasExportInvoices, setHasExportInvoices] = React.useState(false)
 
   const normalizedCuit = cuit.replace(/\D/g, "")
+  const progressValue = ((currentStep - 1) / (stepperSteps.length - 1)) * 100
   const canSave =
     Boolean(certificate) &&
     Boolean(wsfePointOfSale) &&
@@ -147,7 +157,8 @@ export function ArcaOnboarding({
   return (
     <main className="min-h-svh bg-background p-4 md:p-6">
       <div className="mx-auto flex max-w-6xl flex-col gap-5">
-        {/* Header */}
+
+        {/* ── Header ── */}
         <header className="overflow-hidden rounded-2xl border border-[#B5D4F4] bg-[#E6F1FB] dark:border-[#185FA5]/60 dark:bg-[#0C447C]/35">
           <div className="flex flex-col gap-4 p-5 md:flex-row md:items-start md:justify-between md:p-6">
             <div>
@@ -191,8 +202,21 @@ export function ArcaOnboarding({
               </Button>
             </div>
           </div>
+
+          {/* Progress bar dentro del header */}
+          <div className="border-t border-[#B5D4F4]/60 px-5 py-3 dark:border-[#185FA5]/40">
+            <div className="flex items-center justify-between text-xs text-[#0C447C]/70 dark:text-[#E6F1FB]/60 mb-1.5">
+              <span>Paso {currentStep} de {stepperSteps.length} — {stepperSteps[currentStep - 1].label}</span>
+              <span>{Math.round(progressValue === 0 ? 5 : progressValue)}%</span>
+            </div>
+            <Progress
+              className="h-1.5 bg-[#B5D4F4]/40 dark:bg-[#185FA5]/20 [&>div]:bg-[#185FA5]"
+              value={progressValue === 0 ? 5 : progressValue}
+            />
+          </div>
         </header>
 
+        {/* ── Help sheet ── */}
         <Sheet onOpenChange={setIsHelpOpen} open={isHelpOpen}>
           <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:!max-w-xl md:!max-w-2xl">
             <SheetHeader className="border-b px-6 py-5 pr-14">
@@ -207,16 +231,20 @@ export function ArcaOnboarding({
           </SheetContent>
         </Sheet>
 
+        {/* ── Stepper ── */}
         <Stepper currentStep={currentStep} />
 
+        {/* ── Error ── */}
         {error ? (
-          <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            {error}
-          </div>
+          <Alert variant="destructive">
+            <AlertTriangleIcon className="size-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         ) : null}
 
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
           <section className="space-y-5">
+
             {/* ── PASO 1: Generar código ── */}
             <StepCard
               currentStep={currentStep}
@@ -263,7 +291,7 @@ export function ArcaOnboarding({
               title="Hacé el trámite en ARCA"
             >
               <div className="space-y-5">
-                {/* Mostrar código */}
+                {/* Código */}
                 <div className="grid gap-3 rounded-xl border-[0.5px] bg-secondary/40 p-4 dark:bg-secondary/20">
                   <Label htmlFor="arca-csr">
                     Tu código de autorización — copialo o descargalo antes de
@@ -309,75 +337,133 @@ export function ArcaOnboarding({
                   </div>
                 </div>
 
-                <WarningBox>
-                  Dejá esta pantalla abierta mientras trabajás en ARCA. El
-                  código es válido por 4 horas, así que no apures el trámite.
-                </WarningBox>
+                <Alert className="border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300 [&>svg]:text-amber-600 dark:[&>svg]:text-amber-400">
+                  <AlertTriangleIcon className="size-4" />
+                  <AlertDescription>
+                    Dejá esta pantalla abierta mientras trabajás en ARCA. El
+                    código es válido por 4 horas, así que no apures el trámite.
+                  </AlertDescription>
+                </Alert>
 
-                {/* Las 3 tareas en ARCA */}
-                <div className="space-y-3">
+                {/* Las 3 tareas en ARCA con Accordion */}
+                <div className="space-y-2">
                   <p className="text-sm font-semibold text-foreground">
                     Dentro de ARCA hacé estas 3 cosas, en orden:
                   </p>
 
-                  <ExpandableTask
-                    defaultOpen
-                    number={1}
-                    subtitle="Sección: Administración de Certificados Digitales"
-                    title="Subí el código y descargá el certificado"
+                  <Accordion
+                    className="space-y-2"
+                    defaultValue="task-1"
+                    type="single"
+                    collapsible
                   >
-                    <InstructionList
-                      items={[
-                        "Entrá a arca.gob.ar e iniciá sesión con tu CUIT y clave fiscal.",
-                        "Buscá y abrí Administración de Certificados Digitales.",
-                        "Hacé click en Agregar alias.",
-                        "En Alias escribí cualquier nombre, por ejemplo: conta-app.",
-                        "En Examinar elegí el archivo de código que descargaste (o pegá el texto si usaste Copiar).",
-                        "Hacé click en Agregar Alias.",
-                        "En la lista buscá tu alias y hacé click en Ver.",
-                        "Hacé click en Descargar. Guardá ese archivo — lo vas a necesitar en el paso 3.",
-                      ]}
-                    />
-                  </ExpandableTask>
+                    <AccordionItem
+                      className="overflow-hidden rounded-xl border border-[#B5D4F4] dark:border-[#185FA5]/60"
+                      value="task-1"
+                    >
+                      <AccordionTrigger className="bg-[#E6F1FB] px-4 hover:bg-[#dcedf9] hover:no-underline dark:bg-[#0C447C]/35 dark:hover:bg-[#0C447C]/50 [&>svg]:text-[#0C447C] dark:[&>svg]:text-[#E6F1FB]">
+                        <div className="flex items-center gap-3">
+                          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#185FA5] text-xs font-semibold text-white">
+                            1
+                          </span>
+                          <div className="text-left">
+                            <div className="text-sm font-semibold text-[#0C447C] dark:text-[#E6F1FB]">
+                              Subí el código y descargá el certificado
+                            </div>
+                            <div className="text-xs text-[#0C447C]/65 dark:text-[#E6F1FB]/65">
+                              Administración de Certificados Digitales
+                            </div>
+                          </div>
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent className="bg-card px-4 pb-4 pt-3">
+                        <InstructionList
+                          items={[
+                            "Entrá a arca.gob.ar e iniciá sesión con tu CUIT y clave fiscal.",
+                            "Buscá y abrí Administración de Certificados Digitales.",
+                            "Hacé click en Agregar alias.",
+                            "En Alias escribí cualquier nombre, por ejemplo: conta-app.",
+                            "En Examinar elegí el archivo de código que descargaste (o pegá el texto si usaste Copiar).",
+                            "Hacé click en Agregar Alias.",
+                            "En la lista buscá tu alias y hacé click en Ver.",
+                            "Hacé click en Descargar. Guardá ese archivo — lo vas a necesitar en el paso 3.",
+                          ]}
+                        />
+                      </AccordionContent>
+                    </AccordionItem>
 
-                  <ExpandableTask
-                    number={2}
-                    subtitle="Sección: Administrador de Relaciones"
-                    title="Autorizá los servicios de facturación"
-                  >
-                    <InstructionList
-                      items={[
-                        "Dentro de ARCA, buscá y abrí Administrador de Relaciones.",
-                        "Hacé click en Incorporar nueva Relación.",
-                        "En la lista expandí ARCA → WebServices.",
-                        "Seleccioná Facturación Electrónica y confirmá.",
-                        "Volvé a hacer click en Incorporar nueva Relación.",
-                        "Esta vez seleccioná Facturación Electrónica de Exportación y confirmá.",
-                      ]}
-                    />
-                  </ExpandableTask>
+                    <AccordionItem
+                      className="overflow-hidden rounded-xl border border-[#B5D4F4] dark:border-[#185FA5]/60"
+                      value="task-2"
+                    >
+                      <AccordionTrigger className="bg-[#E6F1FB] px-4 hover:bg-[#dcedf9] hover:no-underline dark:bg-[#0C447C]/35 dark:hover:bg-[#0C447C]/50 [&>svg]:text-[#0C447C] dark:[&>svg]:text-[#E6F1FB]">
+                        <div className="flex items-center gap-3">
+                          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#185FA5] text-xs font-semibold text-white">
+                            2
+                          </span>
+                          <div className="text-left">
+                            <div className="text-sm font-semibold text-[#0C447C] dark:text-[#E6F1FB]">
+                              Autorizá los servicios de facturación
+                            </div>
+                            <div className="text-xs text-[#0C447C]/65 dark:text-[#E6F1FB]/65">
+                              Administrador de Relaciones
+                            </div>
+                          </div>
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent className="bg-card px-4 pb-4 pt-3">
+                        <InstructionList
+                          items={[
+                            "Dentro de ARCA, buscá y abrí Administrador de Relaciones.",
+                            "Hacé click en Incorporar nueva Relación.",
+                            "En la lista expandí ARCA → WebServices.",
+                            "Seleccioná Facturación Electrónica y confirmá.",
+                            "Volvé a hacer click en Incorporar nueva Relación.",
+                            "Esta vez seleccioná Facturación Electrónica de Exportación y confirmá.",
+                          ]}
+                        />
+                      </AccordionContent>
+                    </AccordionItem>
 
-                  <ExpandableTask
-                    number={3}
-                    subtitle="Sección: RCEL - ABM Puntos de Venta"
-                    title="Creá los puntos de venta"
-                  >
-                    <>
-                      <InstructionList
-                        items={[
-                          "Dentro de ARCA, buscá y abrí RCEL - ABM Puntos de Venta.",
-                          "Creá un punto de venta de tipo Factura Electrónica - Monotributo - Web Services. Anotá el número que te asigna.",
-                          "Si también emitís facturas al exterior: creá otro de tipo Comprobantes de Exportación - Web Services. Anotá ese número también.",
-                        ]}
-                      />
-                      <div className="mt-3 rounded-lg border border-[#B5D4F4] bg-[#E6F1FB] px-3 py-2 text-xs text-[#0C447C] dark:border-[#185FA5]/60 dark:bg-[#0C447C]/30 dark:text-[#E6F1FB]">
-                        <strong>¿Qué es un punto de venta?</strong> Es el número
-                        que aparece antes del guión en tus facturas (ej:{" "}
-                        <span className="font-mono">0001</span>-00000001). ARCA
-                        te asigna uno cuando lo creás.
-                      </div>
-                    </>
-                  </ExpandableTask>
+                    <AccordionItem
+                      className="overflow-hidden rounded-xl border border-[#B5D4F4] dark:border-[#185FA5]/60"
+                      value="task-3"
+                    >
+                      <AccordionTrigger className="bg-[#E6F1FB] px-4 hover:bg-[#dcedf9] hover:no-underline dark:bg-[#0C447C]/35 dark:hover:bg-[#0C447C]/50 [&>svg]:text-[#0C447C] dark:[&>svg]:text-[#E6F1FB]">
+                        <div className="flex items-center gap-3">
+                          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#185FA5] text-xs font-semibold text-white">
+                            3
+                          </span>
+                          <div className="text-left">
+                            <div className="text-sm font-semibold text-[#0C447C] dark:text-[#E6F1FB]">
+                              Creá los puntos de venta
+                            </div>
+                            <div className="text-xs text-[#0C447C]/65 dark:text-[#E6F1FB]/65">
+                              RCEL - ABM Puntos de Venta
+                            </div>
+                          </div>
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent className="bg-card px-4 pb-4 pt-3 space-y-3">
+                        <InstructionList
+                          items={[
+                            "Dentro de ARCA, buscá y abrí RCEL - ABM Puntos de Venta.",
+                            "Creá un punto de venta de tipo Factura Electrónica - Monotributo - Web Services. Anotá el número que te asigna.",
+                            "Si también emitís facturas al exterior: creá otro de tipo Comprobantes de Exportación - Web Services. Anotá ese número también.",
+                          ]}
+                        />
+                        <Alert className="border-[#B5D4F4] bg-[#E6F1FB] text-[#0C447C] dark:border-[#185FA5]/60 dark:bg-[#0C447C]/30 dark:text-[#E6F1FB] [&>svg]:text-[#185FA5] dark:[&>svg]:text-[#B5D4F4]">
+                          <InfoIcon className="size-4" />
+                          <AlertDescription className="text-xs">
+                            <strong>¿Qué es un punto de venta?</strong> Es el
+                            número antes del guión en tus facturas (ej:{" "}
+                            <span className="font-mono">0001</span>-00000001).
+                            ARCA te asigna uno cuando lo creás.
+                          </AlertDescription>
+                        </Alert>
+                      </AccordionContent>
+                    </AccordionItem>
+                  </Accordion>
                 </div>
 
                 <Button
@@ -400,7 +486,6 @@ export function ArcaOnboarding({
               title="Guardá la conexión"
             >
               <form className="grid gap-5" onSubmit={handleSaveCertificate}>
-                {/* Certificado */}
                 <div className="grid gap-2">
                   <Label htmlFor="arca-certificate">
                     Archivo de certificado (el que descargaste de ARCA)
@@ -414,19 +499,19 @@ export function ArcaOnboarding({
                   />
                   <p className="flex items-center gap-2 text-sm text-muted-foreground">
                     <FileUpIcon className="size-4 shrink-0 text-[#185FA5] dark:text-[#B5D4F4]" />
-                    Es el archivo que descargaste en la tarea 1 dentro de ARCA.
                     Suele llamarse algo como{" "}
                     <span className="font-mono text-xs">conta-app.crt</span>.
                   </p>
                   {certificate ? (
-                    <div className="flex items-center gap-2 rounded-xl border border-[#C0DD97] bg-[#EAF3DE] px-4 py-3 text-sm font-medium text-[#27500A] dark:border-[#C0DD97]/40 dark:bg-[#27500A]/35 dark:text-[#EAF3DE]">
-                      <CheckCircle2Icon className="size-4 shrink-0" />
-                      Archivo cargado correctamente.
-                    </div>
+                    <Alert className="border-[#C0DD97] bg-[#EAF3DE] text-[#27500A] dark:border-[#C0DD97]/40 dark:bg-[#27500A]/35 dark:text-[#EAF3DE] [&>svg]:text-[#639922]">
+                      <CheckCircle2Icon className="size-4" />
+                      <AlertDescription className="font-medium">
+                        Archivo cargado correctamente.
+                      </AlertDescription>
+                    </Alert>
                   ) : null}
                 </div>
 
-                {/* Punto de venta Factura C */}
                 <div className="grid gap-2">
                   <Label htmlFor="arca-wsfe-pos">
                     Número de punto de venta para Factura C
@@ -449,7 +534,6 @@ export function ArcaOnboarding({
                   </p>
                 </div>
 
-                {/* Punto de venta Factura E — opcional */}
                 <div className="rounded-xl border p-4">
                   <label className="flex cursor-pointer items-start gap-3">
                     <Checkbox
@@ -464,8 +548,8 @@ export function ArcaOnboarding({
                         También emito facturas al exterior (Factura E)
                       </div>
                       <div className="mt-0.5 text-xs text-muted-foreground">
-                        Marcá esto solo si cobrás de clientes de otros países.
-                        Podés configurarlo después si no estás seguro.
+                        Solo si cobrás de clientes de otros países. Podés
+                        configurarlo después si no estás seguro.
                       </div>
                     </div>
                   </label>
@@ -507,21 +591,18 @@ export function ArcaOnboarding({
               </form>
             </StepCard>
 
-            {/* Nota de seguridad */}
-            <div className="rounded-xl border bg-secondary/40 p-4 text-sm text-muted-foreground dark:bg-secondary/20">
-              <div className="mb-2 flex items-center gap-2 font-semibold text-foreground">
-                <ShieldCheckIcon className="size-4 text-[#639922]" />
-                Tu clave fiscal no se guarda nunca
-              </div>
-              La app solo guarda la conexión técnica para facturar. Tu clave
-              fiscal queda siempre dentro de ARCA y no la pedimos en ningún
-              momento.
-            </div>
+            <Alert className="border-[#C0DD97] bg-[#EAF3DE] text-[#27500A] dark:border-[#C0DD97]/40 dark:bg-[#27500A]/35 dark:text-[#EAF3DE] [&>svg]:text-[#639922]">
+              <ShieldCheckIcon className="size-4" />
+              <AlertDescription>
+                <strong>Tu clave fiscal no se guarda nunca.</strong> La app solo
+                guarda la conexión técnica para facturar. Tu clave fiscal queda
+                siempre dentro de ARCA.
+              </AlertDescription>
+            </Alert>
           </section>
 
           {/* ── Sidebar ── */}
           <aside className="space-y-4 lg:sticky lg:top-5">
-            {/* Avance */}
             <Card className="overflow-hidden rounded-xl border-[0.5px] shadow-none">
               <CardHeader className="bg-[#E6F1FB] text-[#0C447C] dark:bg-[#0C447C]/35 dark:text-[#E6F1FB]">
                 <CardTitle className="text-base">Tu avance</CardTitle>
@@ -533,7 +614,6 @@ export function ArcaOnboarding({
                 {stepperSteps.map((step) => {
                   const isComplete = step.number < currentStep
                   const isActive = step.number === currentStep
-
                   return (
                     <div
                       className={`flex items-center gap-3 rounded-xl border px-3 py-2 text-sm ${
@@ -570,7 +650,6 @@ export function ArcaOnboarding({
               </CardContent>
             </Card>
 
-            {/* Tiempo estimado */}
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm dark:border-amber-900/60 dark:bg-amber-950/40">
               <div className="mb-2 flex items-center gap-2 font-semibold text-amber-800 dark:text-amber-300">
                 <Clock3Icon className="size-4" />
@@ -595,7 +674,6 @@ export function ArcaOnboarding({
               </p>
             </div>
 
-            {/* Ayuda */}
             <Card className="overflow-hidden rounded-xl border-[#B5D4F4] shadow-none dark:border-[#185FA5]/60">
               <CardHeader className="bg-[#E6F1FB] pb-3 dark:bg-[#0C447C]/35">
                 <CardTitle className="text-base text-[#0C447C] dark:text-[#E6F1FB]">
@@ -617,19 +695,13 @@ export function ArcaOnboarding({
               </CardContent>
             </Card>
 
-            <WarningBox>
-              Abrí ARCA en una pestaña nueva y dejá esta app abierta. Cuando
-              termines en ARCA volvés acá para el paso 3.
-            </WarningBox>
-
-            <div className="rounded-xl border border-[#C0DD97] bg-[#EAF3DE] p-4 text-sm leading-6 text-[#27500A] dark:border-[#C0DD97]/40 dark:bg-[#27500A]/35 dark:text-[#EAF3DE]">
-              <div className="mb-2 flex items-center gap-2 font-semibold">
-                <ShieldCheckIcon className="size-4" />
-                Qué guardás al final
-              </div>
-              Solo el archivo de certificado y los números de punto de venta.
-              Nada de tu clave fiscal.
-            </div>
+            <Alert className="border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300 [&>svg]:text-amber-600 dark:[&>svg]:text-amber-400">
+              <AlertTriangleIcon className="size-4" />
+              <AlertDescription className="text-xs">
+                Abrí ARCA en una pestaña nueva y dejá esta app abierta. Cuando
+                termines en ARCA volvés acá para el paso 3.
+              </AlertDescription>
+            </Alert>
           </aside>
         </div>
       </div>
@@ -733,7 +805,6 @@ function StatusBadge({
       </Badge>
     )
   }
-
   if (step === currentStep) {
     return (
       <Badge className="w-fit rounded-[99px] bg-[#185FA5] text-white hover:bg-[#185FA5]">
@@ -741,55 +812,10 @@ function StatusBadge({
       </Badge>
     )
   }
-
   return (
     <Badge className="w-fit rounded-[99px] border bg-card text-muted-foreground hover:bg-card">
       Pendiente
     </Badge>
-  )
-}
-
-function ExpandableTask({
-  children,
-  defaultOpen = false,
-  number,
-  subtitle,
-  title,
-}: {
-  children: React.ReactNode
-  defaultOpen?: boolean
-  number: number
-  subtitle: string
-  title: string
-}) {
-  const [isOpen, setIsOpen] = React.useState(defaultOpen)
-
-  return (
-    <div className="overflow-hidden rounded-xl border border-[#B5D4F4] dark:border-[#185FA5]/60">
-      <button
-        className="flex w-full items-center gap-3 bg-[#E6F1FB] px-4 py-3 text-left transition-colors hover:bg-[#dcedf9] dark:bg-[#0C447C]/35 dark:hover:bg-[#0C447C]/50"
-        onClick={() => setIsOpen((v) => !v)}
-        type="button"
-      >
-        <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#185FA5] text-xs font-semibold text-white">
-          {number}
-        </span>
-        <div className="flex-1 text-left">
-          <div className="text-sm font-semibold text-[#0C447C] dark:text-[#E6F1FB]">
-            {title}
-          </div>
-          <div className="text-xs text-[#0C447C]/65 dark:text-[#E6F1FB]/65">
-            {subtitle}
-          </div>
-        </div>
-        <ChevronDownIcon
-          className={`size-4 shrink-0 text-[#0C447C] transition-transform dark:text-[#E6F1FB] ${
-            isOpen ? "rotate-180" : ""
-          }`}
-        />
-      </button>
-      {isOpen ? <div className="bg-card p-4">{children}</div> : null}
-    </div>
   )
 }
 
@@ -804,14 +830,6 @@ function InstructionList({ items }: { items: string[] }) {
           <p className="text-foreground">{highlightArcaTerms(item)}</p>
         </div>
       ))}
-    </div>
-  )
-}
-
-function WarningBox({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-xl border border-[#FAC775] bg-[#FAEEDA] px-4 py-3 text-sm leading-6 font-medium text-[#633806] dark:border-[#FAC775]/50 dark:bg-[#633806]/30 dark:text-[#FAEEDA]">
-      {children}
     </div>
   )
 }
