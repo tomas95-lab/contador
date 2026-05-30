@@ -89,7 +89,7 @@ export function AuthScreen({ canUseEmailAuth, onUseDemo }: AuthScreenProps) {
           <div className="grid grid-cols-2 gap-3">
             {features.map(({ icon: Icon, title, text }) => (
               <div
-                className="rounded-xl border border-white/15 bg-white/10 p-4 backdrop-blur-sm"
+                className="rounded-xl border border-white/20 bg-white/15 p-4 backdrop-blur-sm"
                 key={title}
               >
                 <div className="mb-2 flex size-8 items-center justify-center rounded-lg bg-white/15">
@@ -98,7 +98,7 @@ export function AuthScreen({ canUseEmailAuth, onUseDemo }: AuthScreenProps) {
                 <p className="mb-0.5 text-sm font-semibold text-white">
                   {title}
                 </p>
-                <p className="text-xs leading-snug text-white/65">{text}</p>
+                <p className="text-xs leading-snug text-white/75">{text}</p>
               </div>
             ))}
           </div>

@@ -11,6 +11,10 @@ import {
   FileUpIcon,
   InfoIcon,
   Loader2Icon,
+  MailIcon,
+  MessageCircleIcon,
+  MonitorIcon,
+  PlayCircleIcon,
   ShieldCheckIcon,
 } from "lucide-react"
 
@@ -47,15 +51,15 @@ import {
   generateArcaCsr,
   saveArcaCertificate,
 } from "@/lib/arca-credentials-api"
+import { useIsMobile } from "@/hooks/use-mobile"
 
 type ArcaOnboardingProps = {
   onComplete: (cuit: string) => void
+  onDemoClick: () => void
   onSignOut: () => void
 }
 
 type OnboardingStep = 1 | 2 | 3
-
-const arcaUrl = "https://arca.gob.ar"
 
 const stepperSteps: {
   number: OnboardingStep
@@ -67,10 +71,14 @@ const stepperSteps: {
   { number: 3, label: "Guardar conexión", where: "Acá en la app" },
 ]
 
+const arcaLoginUrl = "https://auth.afip.gob.ar/contribuyente_/login.xhtml"
+
 export function ArcaOnboarding({
   onComplete,
+  onDemoClick,
   onSignOut,
 }: ArcaOnboardingProps) {
+  const isMobile = useIsMobile()
   const [isHelpOpen, setIsHelpOpen] = React.useState(false)
   const [cuit, setCuit] = React.useState("")
   const [csr, setCsr] = React.useState("")
@@ -79,17 +87,29 @@ export function ArcaOnboarding({
   const [error, setError] = React.useState<string | null>(null)
   const [isGenerating, setIsGenerating] = React.useState(false)
   const [isSaving, setIsSaving] = React.useState(false)
-  const [copied, setCopied] = React.useState(false)
   const [wsfePointOfSale, setWsfePointOfSale] = React.useState("")
   const [wsfexPointOfSale, setWsfexPointOfSale] = React.useState("")
   const [hasExportInvoices, setHasExportInvoices] = React.useState(false)
+  const [allowMobileOnboarding, setAllowMobileOnboarding] =
+    React.useState(false)
 
+  const isMobileViewport =
+    typeof window !== "undefined" && window.innerWidth < 768
   const normalizedCuit = cuit.replace(/\D/g, "")
   const progressValue = ((currentStep - 1) / (stepperSteps.length - 1)) * 100
   const canSave =
     Boolean(certificate) &&
     Boolean(wsfePointOfSale) &&
     (!hasExportInvoices || Boolean(wsfexPointOfSale))
+
+  if ((isMobile || isMobileViewport) && !allowMobileOnboarding) {
+    return (
+      <MobileArcaTransfer
+        onContinueMobile={() => setAllowMobileOnboarding(true)}
+        onDemoClick={onDemoClick}
+      />
+    )
+  }
 
   async function handleGenerateCsr(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -104,12 +124,6 @@ export function ArcaOnboarding({
     } finally {
       setIsGenerating(false)
     }
-  }
-
-  async function handleCopyCsr() {
-    await navigator.clipboard.writeText(csr)
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1800)
   }
 
   function handleDownloadCsr() {
@@ -171,7 +185,7 @@ export function ArcaOnboarding({
                 </Badge>
                 <Badge className="flex items-center gap-1 rounded-[99px] border border-amber-200 bg-amber-50 px-3 py-1 text-amber-700 hover:bg-amber-50 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300">
                   <Clock3Icon className="size-3" />
-                  ~30 minutos la primera vez
+                  ~20 minutos la primera vez
                 </Badge>
               </div>
               <h1 className="font-heading text-2xl font-semibold tracking-tight text-[#0C447C] md:text-3xl dark:text-[#E6F1FB]">
@@ -306,16 +320,7 @@ export function ArcaOnboarding({
                   />
                   <div className="flex flex-wrap gap-2">
                     <Button
-                      className="bg-[#185FA5] text-white hover:bg-[#0C447C] disabled:opacity-50"
-                      disabled={!csr}
-                      onClick={handleCopyCsr}
-                      type="button"
-                    >
-                      <CopyIcon />
-                      {copied ? "Copiado ✓" : "Copiar código"}
-                    </Button>
-                    <Button
-                      className="border-[#B5D4F4] text-[#0C447C] hover:bg-[#E6F1FB] disabled:opacity-50 dark:border-[#185FA5]/60 dark:text-[#E6F1FB] dark:hover:bg-[#185FA5]/20"
+                      className="bg-[#185FA5] text-white hover:bg-[#0C447C] hover:text-amber-50 disabled:opacity-50  dark:text-[#E6F1FB] dark:hover:bg-[#185FA5]/20"
                       disabled={!csr}
                       onClick={handleDownloadCsr}
                       type="button"
@@ -329,7 +334,7 @@ export function ArcaOnboarding({
                       className="border-[#B5D4F4] text-[#0C447C] hover:bg-[#E6F1FB] dark:border-[#185FA5]/60 dark:text-[#E6F1FB] dark:hover:bg-[#185FA5]/20"
                       variant="outline"
                     >
-                      <a href={arcaUrl} rel="noreferrer" target="_blank">
+                      <a href={arcaLoginUrl} rel="noreferrer" target="_blank">
                         <ExternalLinkIcon />
                         Abrir ARCA
                       </a>
@@ -342,6 +347,8 @@ export function ArcaOnboarding({
                   <AlertDescription>
                     Dejá esta pantalla abierta mientras trabajás en ARCA. El
                     código es válido por 4 horas, así que no apures el trámite.
+                    Si ARCA bloquea el acceso desde el botón, entrá manualmente
+                    escribiendo arca.gob.ar en una pestaña nueva.
                   </AlertDescription>
                 </Alert>
 
@@ -376,17 +383,17 @@ export function ArcaOnboarding({
                           </div>
                         </div>
                       </AccordionTrigger>
-                      <AccordionContent className="bg-card px-4 pb-4 pt-3">
+                      <AccordionContent className="h-auto bg-card px-4 pb-4 pt-3">
                         <InstructionList
                           items={[
                             "Entrá a arca.gob.ar e iniciá sesión con tu CUIT y clave fiscal.",
                             "Buscá y abrí Administración de Certificados Digitales.",
                             "Hacé click en Agregar alias.",
                             "En Alias escribí cualquier nombre, por ejemplo: conta-app.",
-                            "En Examinar elegí el archivo de código que descargaste (o pegá el texto si usaste Copiar).",
+                            "En Seleccionar Archivo elegí el archivo `.csr` de código que descargaste.",
                             "Hacé click en Agregar Alias.",
-                            "En la lista buscá tu alias y hacé click en Ver.",
-                            "Hacé click en Descargar. Guardá ese archivo — lo vas a necesitar en el paso 3.",
+                            "En la lista de alias buscá tu alias y hacé click en Ver.",
+                            "Hacé click en Descargar. Guardá ese archivo, lo vas a necesitar en el paso 3.",
                           ]}
                         />
                       </AccordionContent>
@@ -411,17 +418,36 @@ export function ArcaOnboarding({
                           </div>
                         </div>
                       </AccordionTrigger>
-                      <AccordionContent className="bg-card px-4 pb-4 pt-3">
+                      <AccordionContent className="h-auto space-y-3 bg-card px-4 pb-4 pt-3">
                         <InstructionList
                           items={[
-                            "Dentro de ARCA, buscá y abrí Administrador de Relaciones.",
+                            "Dentro de ARCA, buscá y abrí Administrador de Relaciones. Este paso autoriza Web Services, no crea puntos de venta.",
                             "Hacé click en Incorporar nueva Relación.",
-                            "En la lista expandí ARCA → WebServices.",
-                            "Seleccioná Facturación Electrónica y confirmá.",
-                            "Volvé a hacer click en Incorporar nueva Relación.",
-                            "Esta vez seleccioná Facturación Electrónica de Exportación y confirmá.",
+                            "En la pantalla de Incorporar nueva Relación, revisá que Autorizante (Dador) y Representado sean tu CUIT.",
+                            "Para Facturación Electrónica común (WSFE), en Servicio presioná Buscar.",
+                            "Seleccioná ARCA → WebServices → Facturación Electrónica.",
+                            "Luego, en Representante, presioná Buscar.",
+                            "Seleccioná el alias/certificado que creaste en el paso anterior, por ejemplo conta-app.",
+                            "Confirmá la relación.",
+                            "Si también vas a emitir Factura E: Administrador de Relaciones → Incorporar nueva Relación → Buscar Servicio → ARCA → WebServices → Factura electronica de exportacion.",
+                            "Para Factura E, después buscá el Representante, seleccioná el mismo alias/certificado y confirmá la relación.",
                           ]}
                         />
+                        <Alert className="border-[#B5D4F4] bg-[#E6F1FB] text-[#0C447C] dark:border-[#185FA5]/60 dark:bg-[#0C447C]/30 dark:text-[#E6F1FB] [&>svg]:text-[#185FA5] dark:[&>svg]:text-[#B5D4F4]">
+                          <InfoIcon className="size-4" />
+                          <AlertDescription className="space-y-2 text-xs">
+                            <p>
+                              El Representante no es otra persona: es el
+                              certificado/alias que creaste para que Contable
+                              pueda operar por Web Services.
+                            </p>
+                            <p>
+                              ARCA suele bloquear links externos o profundos.
+                              Por eso estas instrucciones usan los nombres que
+                              tenés que buscar dentro del sitio.
+                            </p>
+                          </AlertDescription>
+                        </Alert>
                       </AccordionContent>
                     </AccordionItem>
 
@@ -436,18 +462,18 @@ export function ArcaOnboarding({
                           </span>
                           <div className="text-left">
                             <div className="text-sm font-semibold text-[#0C447C] dark:text-[#E6F1FB]">
-                              Creá los puntos de venta
+                              Creá y anotá los puntos de venta
                             </div>
                             <div className="text-xs text-[#0C447C]/65 dark:text-[#E6F1FB]/65">
-                              RCEL - ABM Puntos de Venta
+                              Administración de puntos de venta y domicilios
                             </div>
                           </div>
                         </div>
                       </AccordionTrigger>
-                      <AccordionContent className="bg-card px-4 pb-4 pt-3 space-y-3">
+                      <AccordionContent className="h-auto space-y-3 bg-card px-4 pb-4 pt-3">
                         <InstructionList
                           items={[
-                            "Dentro de ARCA, buscá y abrí RCEL - ABM Puntos de Venta.",
+                            "Dentro de ARCA, buscá Administración de puntos de venta y domicilios. Este paso es aparte de Administrador de Relaciones.",
                             "Creá un punto de venta de tipo Factura Electrónica - Monotributo - Web Services. Anotá el número que te asigna.",
                             "Si también emitís facturas al exterior: creá otro de tipo Comprobantes de Exportación - Web Services. Anotá ese número también.",
                           ]}
@@ -603,7 +629,7 @@ export function ArcaOnboarding({
 
           {/* ── Sidebar ── */}
           <aside className="space-y-4 lg:sticky lg:top-5">
-            <Card className="overflow-hidden rounded-xl border-[0.5px] shadow-none">
+            <Card className="overflow-hidden rounded-xl border-[0.5px] shadow-none pt-0">
               <CardHeader className="bg-[#E6F1FB] text-[#0C447C] dark:bg-[#0C447C]/35 dark:text-[#E6F1FB]">
                 <CardTitle className="text-base">Tu avance</CardTitle>
                 <CardDescription className="text-[#0C447C]/75 dark:text-[#E6F1FB]/75">
@@ -658,15 +684,15 @@ export function ArcaOnboarding({
               <ul className="space-y-1.5 text-xs text-amber-700 dark:text-amber-400">
                 <li className="flex justify-between">
                   <span>Paso 1 — Generar código</span>
-                  <span className="font-medium">~2 min</span>
+                  <span className="font-medium">~1 min</span>
                 </li>
                 <li className="flex justify-between">
                   <span>Paso 2 — Trámite en ARCA</span>
-                  <span className="font-medium">~20 min</span>
+                  <span className="font-medium">~18 min</span>
                 </li>
                 <li className="flex justify-between">
                   <span>Paso 3 — Guardar conexión</span>
-                  <span className="font-medium">~2 min</span>
+                  <span className="font-medium">~1 min</span>
                 </li>
               </ul>
               <p className="mt-2 text-xs text-amber-600 dark:text-amber-500">
@@ -674,7 +700,7 @@ export function ArcaOnboarding({
               </p>
             </div>
 
-            <Card className="overflow-hidden rounded-xl border-[#B5D4F4] shadow-none dark:border-[#185FA5]/60">
+            <Card className="overflow-hidden rounded-xl border-[#B5D4F4] shadow-none dark:border-[#185FA5]/60 pt-0">
               <CardHeader className="bg-[#E6F1FB] pb-3 dark:bg-[#0C447C]/35">
                 <CardTitle className="text-base text-[#0C447C] dark:text-[#E6F1FB]">
                   ¿Te trabaste?
@@ -705,6 +731,103 @@ export function ArcaOnboarding({
           </aside>
         </div>
       </div>
+    </main>
+  )
+}
+
+function MobileArcaTransfer({
+  onContinueMobile,
+  onDemoClick,
+}: {
+  onContinueMobile: () => void
+  onDemoClick: () => void
+}) {
+  const [copied, setCopied] = React.useState(false)
+
+  async function handleCopyLink() {
+    await navigator.clipboard.writeText(window.location.origin + "/app")
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 2000)
+  }
+
+  function handleEmailLink() {
+    const url = window.location.origin + "/app"
+    const subject = encodeURIComponent("Conectar ARCA — contable.")
+    const body = encodeURIComponent(`Seguí desde acá: ${url}`)
+    window.location.href = `mailto:?subject=${subject}&body=${body}`
+  }
+
+  function handleWhatsAppLink() {
+    const url = window.location.origin + "/app"
+    const text = encodeURIComponent(`Seguí desde acá: ${url}`)
+    window.location.href = `https://wa.me/?text=${text}`
+  }
+
+  return (
+    <main className="flex min-h-svh items-center justify-center bg-background p-4">
+      <Card className="w-full max-w-md rounded-xl border-[#B5D4F4] shadow-none dark:border-[#185FA5]/60">
+        <CardHeader className="items-center gap-3 text-center">
+          <div className="flex size-14 items-center justify-center rounded-full bg-[#E6F1FB] text-[#185FA5] dark:bg-[#0C447C]/35 dark:text-[#B5D4F4]">
+            <MonitorIcon className="size-7" />
+          </div>
+          <div>
+            <CardTitle className="text-xl text-[#0C447C] dark:text-[#E6F1FB]">
+              Conectá ARCA desde tu computadora
+            </CardTitle>
+            <CardDescription className="mt-2 text-sm leading-6">
+              Este proceso requiere descargar certificados y navegar ARCA. Es
+              muy difícil desde el celular — guardá el link y seguí desde tu
+              compu.
+            </CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent className="grid gap-2">
+          <Button
+            className="bg-[#185FA5] text-white hover:bg-[#0C447C]"
+            onClick={() => void handleCopyLink()}
+            type="button"
+          >
+            <CopyIcon />
+            {copied ? "Copiado ✓" : "Copiar link"}
+          </Button>
+          <Button
+            className="border-[#B5D4F4] text-[#0C447C] hover:bg-[#E6F1FB] dark:border-[#185FA5]/60 dark:text-[#E6F1FB] dark:hover:bg-[#185FA5]/20"
+            onClick={handleEmailLink}
+            type="button"
+            variant="outline"
+          >
+            <MailIcon />
+            Enviar por email
+          </Button>
+          <Button
+            className="border-[#B5D4F4] text-[#0C447C] hover:bg-[#E6F1FB] dark:border-[#185FA5]/60 dark:text-[#E6F1FB] dark:hover:bg-[#185FA5]/20"
+            onClick={handleWhatsAppLink}
+            type="button"
+            variant="outline"
+          >
+            <MessageCircleIcon />
+            Enviar por WhatsApp
+          </Button>
+          <Button
+            className="border-[#C0DD97] bg-[#EAF3DE] text-[#27500A] hover:bg-[#dcebc9] dark:border-[#C0DD97]/40 dark:bg-[#27500A]/35 dark:text-[#EAF3DE] dark:hover:bg-[#27500A]/50"
+            onClick={onDemoClick}
+            type="button"
+            variant="outline"
+          >
+            <PlayCircleIcon />
+            Probar demo sin conectar ARCA
+          </Button>
+          <Button
+            className="border-[#B5D4F4] text-muted-foreground hover:bg-[#E6F1FB] hover:text-[#0C447C] dark:border-[#185FA5]/60 dark:hover:bg-[#185FA5]/20 dark:hover:text-[#E6F1FB]"
+            onClick={onContinueMobile}
+            type="button"
+            variant="outline"
+          >
+            <ArrowRightIcon />
+            Prefiero hacerlo desde mi celular
+          </Button>
+        </CardContent>
+      </Card>
     </main>
   )
 }
@@ -819,18 +942,54 @@ function StatusBadge({
   )
 }
 
-function InstructionList({ items }: { items: string[] }) {
+function InstructionList({ items }: { items: React.ReactNode[] }) {
   return (
     <div className="space-y-3">
       {items.map((item, index) => (
         <div className="flex gap-3 text-sm leading-6" key={index}>
-          <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-[#185FA5] text-xs font-semibold text-white">
+          <span className="flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full bg-[#185FA5] px-2 text-xs font-semibold tabular-nums text-white">
             {index + 1}
           </span>
-          <p className="text-foreground">{highlightArcaTerms(item)}</p>
+          <p className="text-foreground">
+            {typeof item === "string" ? highlightArcaTerms(item) : item}
+          </p>
         </div>
       ))}
     </div>
+  )
+}
+
+const copyableServiceNames = new Set([
+  "Administración de Certificados Digitales",
+  "Administrador de Relaciones",
+  "Incorporar nueva Relación",
+  "Administración de puntos de venta y domicilios",
+  "Facturación Electrónica - Monotributo - Web Services",
+  "Comprobantes de Exportación - Web Services",
+  "Factura electronica de exportacion",
+])
+
+function CopyableServiceName({ name }: { name: string }) {
+  const [copied, setCopied] = React.useState(false)
+
+  function handleCopy() {
+    navigator.clipboard.writeText(name)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      <strong className="font-semibold text-[#0C447C] dark:text-[#B5D4F4]">{name}</strong>
+      <button
+        className="hidden sm:inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-xs text-[#185FA5] hover:bg-[#E6F1FB] dark:text-[#B5D4F4] dark:hover:bg-[#185FA5]/20"
+        onClick={handleCopy}
+        type="button"
+      >
+        {copied ? <CheckCircle2Icon className="size-3" /> : <CopyIcon className="size-3" />}
+        {copied ? "Copiado" : "Copiar nombre"}
+      </button>
+    </span>
   )
 }
 
@@ -839,14 +998,20 @@ function highlightArcaTerms(text: string) {
     "Administración de Certificados Digitales",
     "Administrador de Relaciones",
     "Incorporar nueva Relación",
-    "Facturación Electrónica de Exportación",
+    "Autorizante (Dador)",
+    "Representado",
+    "Representante",
+    "Servicio",
+    "Buscar",
+    "Factura electronica de exportacion",
     "Facturación Electrónica - Monotributo - Web Services",
     "Comprobantes de Exportación - Web Services",
     "Facturación Electrónica",
-    "RCEL - ABM Puntos de Venta",
+    "Web Services",
+    "Administración de puntos de venta y domicilios",
     "Agregar Alias",
     "Agregar alias",
-    "Examinar",
+    "Seleccionar Archivo",
     "Descargar",
     "Alias",
     "Ver",
@@ -856,12 +1021,16 @@ function highlightArcaTerms(text: string) {
 
   return parts.map((part, index) =>
     terms.includes(part) ? (
-      <strong
-        className="font-semibold text-[#0C447C] dark:text-[#B5D4F4]"
-        key={`${part}-${index}`}
-      >
-        {part}
-      </strong>
+      copyableServiceNames.has(part) ? (
+        <CopyableServiceName key={`${part}-${index}`} name={part} />
+      ) : (
+        <strong
+          className="font-semibold text-[#0C447C] dark:text-[#B5D4F4]"
+          key={`${part}-${index}`}
+        >
+          {part}
+        </strong>
+      )
     ) : (
       <React.Fragment key={`${part}-${index}`}>{part}</React.Fragment>
     )

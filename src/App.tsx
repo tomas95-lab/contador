@@ -940,6 +940,7 @@ export default function App() {
             setArcaCredentialsStatus("configured")
             setActiveSection("resumen")
           }}
+          onDemoClick={startDemoSession}
           onSignOut={() => void handleSignOut()}
         />
       </React.Suspense>
