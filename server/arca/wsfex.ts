@@ -1,11 +1,11 @@
 import { config } from "../config.js"
 import type { UserArcaCredentials } from "../lib/arca-credentials.js"
 import { fromArcaDate, roundMoney, toArcaDate } from "./date.js"
-import { ArcaError, nonZeroCode } from "./errors.js"
+import { ArcaError, isArcaAuthenticationError, nonZeroCode } from "./errors.js"
 import { record } from "./objects.js"
 import { getSoapClient } from "./soap.js"
 import { withArcaRequestTimeout } from "./timeout.js"
-import { getAccessTicket } from "./wsaa.js"
+import { getAccessTicket, invalidateTicket } from "./wsaa.js"
 
 const FACTURA_E = 19
 const TIPO_EXPORTACION_SERVICIOS = 2
@@ -211,6 +211,15 @@ export async function getFacturaEAnnualSummary(
   credentials: UserArcaCredentials,
   year = new Date().getFullYear()
 ): Promise<WsfexAnnualSummary> {
+  return withWsfexTicketRetry(credentials, () =>
+    getFacturaEAnnualSummaryOnce(credentials, year)
+  )
+}
+
+async function getFacturaEAnnualSummaryOnce(
+  credentials: UserArcaCredentials,
+  year = new Date().getFullYear()
+): Promise<WsfexAnnualSummary> {
   const ticket = await getAccessTicket(credentials, "wsfex")
   const client = (await getSoapClient(
     config.arca.endpoints.wsfexUrl
@@ -275,6 +284,16 @@ export async function getFacturaEAnnualSummary(
 }
 
 export async function getFacturaEHistoricalSummary(
+  credentials: UserArcaCredentials,
+  pointOfSale: number,
+  options: WsfexHistoricalQueryOptions = {}
+): Promise<WsfexHistoricalSummary> {
+  return withWsfexTicketRetry(credentials, () =>
+    getFacturaEHistoricalSummaryOnce(credentials, pointOfSale, options)
+  )
+}
+
+async function getFacturaEHistoricalSummaryOnce(
   credentials: UserArcaCredentials,
   pointOfSale: number,
   options: WsfexHistoricalQueryOptions = {}
@@ -355,6 +374,15 @@ async function consultFacturaE(
 }
 
 export async function emitFacturaE(
+  credentials: UserArcaCredentials,
+  input: WsfexInvoiceInput
+): Promise<EmittedWsfexInvoice> {
+  return withWsfexTicketRetry(credentials, () =>
+    emitFacturaEOnce(credentials, input)
+  )
+}
+
+async function emitFacturaEOnce(
   credentials: UserArcaCredentials,
   input: WsfexInvoiceInput
 ): Promise<EmittedWsfexInvoice> {
@@ -502,5 +530,21 @@ function getHistoricalWindow(
   return {
     fromNumber: Math.max(1, toNumber - limit + 1),
     toNumber,
+  }
+}
+
+async function withWsfexTicketRetry<T>(
+  credentials: UserArcaCredentials,
+  operation: () => Promise<T>
+) {
+  try {
+    return await operation()
+  } catch (error) {
+    if (!isArcaAuthenticationError(error)) {
+      throw error
+    }
+
+    invalidateTicket(credentials.userId, "wsfex")
+    return operation()
   }
 }

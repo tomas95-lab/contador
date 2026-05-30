@@ -84,8 +84,22 @@ type AuthContext = {
   userId: string
 }
 
+type JwtHeader = {
+  alg?: string
+  kid?: string
+}
+
 type JwtPayload = {
+  exp?: number
   sub?: string
+}
+
+type SupabaseJwk = JsonWebKey & {
+  kid?: string
+}
+
+type JwksResponse = {
+  keys?: SupabaseJwk[]
 }
 
 class UnauthorizedError extends Error {
@@ -96,6 +110,7 @@ class UnauthorizedError extends Error {
 }
 
 const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") ?? "http://localhost:5173"
+let jwksPromise: Promise<JwksResponse> | null = null
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
@@ -275,7 +290,7 @@ async function authenticateRequest(request: Request): Promise<AuthContext> {
     throw new UnauthorizedError()
   }
 
-  const payload = decodeJwtPayload(token)
+  const payload = await verifyJwt(token)
 
   if (!payload.sub) {
     throw new UnauthorizedError()
@@ -302,15 +317,55 @@ function getBearerToken(request: Request) {
   return token
 }
 
-function decodeJwtPayload(token: string): JwtPayload {
+async function verifyJwt(token: string): Promise<JwtPayload> {
   try {
-    const parts = token.split(".")
+    const [encodedHeader, encodedPayload, encodedSignature] = token.split(".")
 
-    if (parts.length !== 3) {
+    if (!encodedHeader || !encodedPayload || !encodedSignature) {
       throw new UnauthorizedError()
     }
 
-    return JSON.parse(base64UrlToText(parts[1])) as JwtPayload
+    const header = JSON.parse(base64UrlToText(encodedHeader)) as JwtHeader
+    const payload = JSON.parse(base64UrlToText(encodedPayload)) as JwtPayload
+
+    if (header.alg !== "ES256" || !header.kid) {
+      throw new UnauthorizedError()
+    }
+
+    if (!payload.exp || payload.exp <= Math.floor(Date.now() / 1000)) {
+      throw new UnauthorizedError()
+    }
+
+    const jwk = await getJwk(header.kid)
+    const key = await crypto.subtle.importKey(
+      "jwk",
+      jwk,
+      {
+        name: "ECDSA",
+        namedCurve: "P-256",
+      },
+      false,
+      ["verify"]
+    )
+    const signedData = new TextEncoder().encode(
+      `${encodedHeader}.${encodedPayload}`
+    )
+    const signature = base64UrlToBytes(encodedSignature)
+    const isValid = await crypto.subtle.verify(
+      {
+        name: "ECDSA",
+        hash: "SHA-256",
+      },
+      key,
+      signature,
+      signedData
+    )
+
+    if (!isValid) {
+      throw new UnauthorizedError()
+    }
+
+    return payload
   } catch (error) {
     if (error instanceof UnauthorizedError) {
       throw error
@@ -318,6 +373,52 @@ function decodeJwtPayload(token: string): JwtPayload {
 
     throw new UnauthorizedError()
   }
+}
+
+async function getJwk(kid: string) {
+  let jwks = await getJwks()
+  let jwk = jwks.keys?.find((key) => key.kid === kid)
+
+  if (!jwk) {
+    jwksPromise = null
+    jwks = await getJwks()
+    jwk = jwks.keys?.find((key) => key.kid === kid)
+  }
+
+  if (!jwk) {
+    throw new UnauthorizedError()
+  }
+
+  return jwk
+}
+
+async function getJwks() {
+  if (!jwksPromise) {
+    jwksPromise = fetchJwks().catch((error) => {
+      jwksPromise = null
+      throw error
+    })
+  }
+
+  return jwksPromise
+}
+
+async function fetchJwks(): Promise<JwksResponse> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")
+
+  if (!supabaseUrl) {
+    throw new Error("Missing SUPABASE_URL")
+  }
+
+  const response = await fetch(
+    `${supabaseUrl}/auth/v1/.well-known/jwks.json`
+  )
+
+  if (!response.ok) {
+    throw new Error("Could not fetch Supabase JWKS")
+  }
+
+  return (await response.json()) as JwksResponse
 }
 
 function base64UrlToText(value: string) {

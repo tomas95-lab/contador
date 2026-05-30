@@ -237,6 +237,51 @@ export function nonZeroCode(value: unknown): boolean {
   return Number(value) !== 0
 }
 
+export function isArcaAuthenticationError(error: unknown) {
+  const raw = collectErrorText(error)
+  const normalized = normalizeForMatch(raw)
+
+  return /(?:token|ticket|ta|login ticket|sesion|sesión).*(?:venc|expir|caduc|invalid|invalido|inválido)|expired.*(?:token|ticket)|auth.*(?:venc|expir|caduc)/.test(
+    normalized
+  )
+}
+
+function collectErrorText(value: unknown, seen = new Set<unknown>()): string {
+  if (value == null) {
+    return ""
+  }
+
+  if (typeof value === "string" || typeof value === "number") {
+    return String(value)
+  }
+
+  if (value instanceof ArcaError) {
+    return `${value.message} ${collectErrorText(value.details, seen)}`
+  }
+
+  if (value instanceof Error) {
+    return value.message
+  }
+
+  if (typeof value !== "object") {
+    return ""
+  }
+
+  if (seen.has(value)) {
+    return ""
+  }
+
+  seen.add(value)
+
+  if (Array.isArray(value)) {
+    return value.map((item) => collectErrorText(item, seen)).join(" ")
+  }
+
+  return Object.values(value)
+    .map((item) => collectErrorText(item, seen))
+    .join(" ")
+}
+
 function matchesPattern(
   pattern: string | RegExp,
   raw: string,

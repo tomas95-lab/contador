@@ -51,6 +51,14 @@ function ticketCachePath(
   )
 }
 
+function ticketCacheFilePrefix(userId: string) {
+  return `ta-${config.arca.environment}-${userId}-`
+}
+
+function ticketCacheFileSuffix(service: ArcaServiceId) {
+  return `-${service}.json`
+}
+
 function isUsableTicket(ticket: AccessTicket): boolean {
   const expiresAt = new Date(ticket.expirationTime).getTime()
   return Number.isFinite(expiresAt) && expiresAt - Date.now() > 5 * 60 * 1000
@@ -251,6 +259,36 @@ function asWsaaError(error: unknown, service: ArcaServiceId): ArcaError {
     arcaEnvironment: config.arca.environment,
     service,
   })
+}
+
+export function invalidateTicket(userId: string, service: ArcaServiceId) {
+  const memoryPrefix = `${userId}:`
+  const memorySuffix = `:${service}`
+
+  for (const key of inMemoryTickets.keys()) {
+    if (key.startsWith(memoryPrefix) && key.endsWith(memorySuffix)) {
+      inMemoryTickets.delete(key)
+    }
+  }
+
+  for (const key of pendingTickets.keys()) {
+    if (key.startsWith(memoryPrefix) && key.endsWith(memorySuffix)) {
+      pendingTickets.delete(key)
+    }
+  }
+
+  try {
+    const filePrefix = ticketCacheFilePrefix(userId)
+    const fileSuffix = ticketCacheFileSuffix(service)
+
+    for (const fileName of fs.readdirSync(config.arca.cacheDir)) {
+      if (fileName.startsWith(filePrefix) && fileName.endsWith(fileSuffix)) {
+        fs.rmSync(path.join(config.arca.cacheDir, fileName), { force: true })
+      }
+    }
+  } catch {
+    // Cache invalidation is best-effort; the next request will still refresh memory.
+  }
 }
 
 export async function getAccessTicket(

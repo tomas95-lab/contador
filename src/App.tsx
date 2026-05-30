@@ -1,18 +1,8 @@
 import * as React from "react"
 import type { Session } from "@supabase/supabase-js"
 
-import { AssistantPanel } from "@/components/accounting/assistant-panel"
-import { AccountantClientsPanel } from "@/components/accounting/accountant-clients-panel"
 import { AuthScreen } from "@/components/auth-screen"
-import { ArcaConnectView } from "@/components/accounting/arca-connect-view"
-import { ArcaOnboarding } from "@/components/accounting/arca-onboarding"
-import { DashboardView } from "@/components/accounting/dashboard-view"
-import { IncomeTracker } from "@/components/accounting/income-tracker"
-import { InvoicingPanel } from "@/components/accounting/invoicing-panel"
-import { ProjectionsPanel } from "@/components/accounting/projections-panel"
 import { AppSidebar } from "@/components/app-sidebar"
-import { HelpView } from "@/components/help-view"
-import { SettingsView } from "@/components/settings-view"
 import { SiteHeader } from "@/components/site-header"
 import { Button } from "@/components/ui/button"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
@@ -87,6 +77,57 @@ type InvoiceEmissionOptions = {
 
 const DEMO_AUTH_STORAGE_KEY = "contable-demo-session"
 const ARCA_CUIT_STORAGE_KEY = "contable-arca-cuit"
+
+const AccountantClientsPanel = React.lazy(() =>
+  import("@/components/accounting/accountant-clients-panel").then((module) => ({
+    default: module.AccountantClientsPanel,
+  }))
+)
+const ArcaConnectView = React.lazy(() =>
+  import("@/components/accounting/arca-connect-view").then((module) => ({
+    default: module.ArcaConnectView,
+  }))
+)
+const ArcaOnboarding = React.lazy(() =>
+  import("@/components/accounting/arca-onboarding").then((module) => ({
+    default: module.ArcaOnboarding,
+  }))
+)
+const AssistantPanel = React.lazy(() =>
+  import("@/components/accounting/assistant-panel").then((module) => ({
+    default: module.AssistantPanel,
+  }))
+)
+const DashboardView = React.lazy(() =>
+  import("@/components/accounting/dashboard-view").then((module) => ({
+    default: module.DashboardView,
+  }))
+)
+const HelpView = React.lazy(() =>
+  import("@/components/help-view").then((module) => ({
+    default: module.HelpView,
+  }))
+)
+const InvoicingPanel = React.lazy(() =>
+  import("@/components/accounting/invoicing-panel").then((module) => ({
+    default: module.InvoicingPanel,
+  }))
+)
+const PaymentsView = React.lazy(() =>
+  import("@/components/accounting/income-tracker").then((module) => ({
+    default: module.IncomeTracker,
+  }))
+)
+const ProjectionsPanel = React.lazy(() =>
+  import("@/components/accounting/projections-panel").then((module) => ({
+    default: module.ProjectionsPanel,
+  }))
+)
+const SettingsView = React.lazy(() =>
+  import("@/components/settings-view").then((module) => ({
+    default: module.SettingsView,
+  }))
+)
 
 const sectionMeta: Record<AppSection, { title: string; description: string }> =
   {
@@ -771,7 +812,7 @@ export default function App() {
     switch (activeSection) {
       case "cobros":
         return (
-          <IncomeTracker
+          <PaymentsView
             category={category}
             onAddPayment={addPayment}
             onDeletePayment={removePayment}
@@ -888,18 +929,20 @@ export default function App() {
 
   if (shouldUseSupabase && arcaCredentialsStatus === "missing") {
     return (
-      <ArcaOnboarding
-        onComplete={(cuit) => {
-          setStoredArcaCuit(cuit)
-          setConnectedArcaCuit(cuit)
-          arcaCredentialsStatusRef.current = "configured"
-          arcaCredentialsUserKeyRef.current =
-            session?.user.id ?? session?.user.email ?? "authenticated"
-          setArcaCredentialsStatus("configured")
-          setActiveSection("resumen")
-        }}
-        onSignOut={() => void handleSignOut()}
-      />
+      <React.Suspense fallback={<LazySectionFallback />}>
+        <ArcaOnboarding
+          onComplete={(cuit) => {
+            setStoredArcaCuit(cuit)
+            setConnectedArcaCuit(cuit)
+            arcaCredentialsStatusRef.current = "configured"
+            arcaCredentialsUserKeyRef.current =
+              session?.user.id ?? session?.user.email ?? "authenticated"
+            setArcaCredentialsStatus("configured")
+            setActiveSection("resumen")
+          }}
+          onSignOut={() => void handleSignOut()}
+        />
+      </React.Suspense>
     )
   }
 
@@ -946,11 +989,22 @@ export default function App() {
         />
         <div className="flex flex-1 flex-col">
           <main className="@container/main flex flex-1 flex-col gap-4 p-4 md:gap-6 md:p-6">
-            {renderSection()}
+            <React.Suspense fallback={<LazySectionFallback />}>
+              {renderSection()}
+            </React.Suspense>
           </main>
         </div>
       </SidebarInset>
     </SidebarProvider>
+  )
+}
+
+function LazySectionFallback() {
+  return (
+    <div
+      aria-busy="true"
+      className="min-h-[320px] animate-pulse rounded-lg bg-muted"
+    />
   )
 }
 
