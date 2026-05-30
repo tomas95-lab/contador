@@ -37,14 +37,16 @@ export const emptyFiscalProfile: UserFiscalProfile = {
   updatedAt: null,
 }
 
-export async function fetchPayments() {
+export async function fetchPayments(limit = 500) {
   assertSupabase()
+  const rowLimit = normalizeFetchLimit(limit, 500)
 
   const { data, error } = await supabase!
     .from("payments")
     .select("*")
     .order("date", { ascending: false })
     .order("created_at", { ascending: false })
+    .limit(rowLimit)
 
   if (error) {
     throw error
@@ -115,14 +117,16 @@ export async function deletePayment(paymentId: string) {
   }
 }
 
-export async function fetchInvoices() {
+export async function fetchInvoices(limit = 500) {
   assertSupabase()
+  const rowLimit = normalizeFetchLimit(limit, 500)
 
   const { data, error } = await supabase!
     .from("invoices")
     .select("*")
     .order("issue_date", { ascending: false })
     .order("created_at", { ascending: false })
+    .limit(rowLimit)
 
   if (error) {
     throw error
@@ -187,6 +191,7 @@ export async function fetchAssistantMessages() {
     .from("assistant_messages")
     .select("*")
     .order("created_at", { ascending: true })
+    .limit(100)
 
   if (error) {
     throw error
@@ -457,6 +462,10 @@ function assertSupabase() {
   if (!supabase) {
     throw new Error("Supabase is not configured")
   }
+}
+
+function normalizeFetchLimit(limit: number, max: number) {
+  return Math.min(Math.max(Math.floor(limit), 1), max)
 }
 
 async function getCurrentUserId() {
