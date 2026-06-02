@@ -90,13 +90,6 @@ app.use(
 )
 app.use(express.json({ limit: "1mb" }))
 
-if (config.demo.onboardingVideoDirectory) {
-  app.use(
-    "/onboarding-video",
-    express.static(config.demo.onboardingVideoDirectory)
-  )
-}
-
 app.use("/api", authenticateJwt)
 
 app.get("/api/health", (_req, res) => {
@@ -107,15 +100,11 @@ app.get("/api/health", (_req, res) => {
 })
 
 app.get("/api/credentials/status", getArcaCredentialsStatus)
-if (config.demo.disableCsrRateLimit) {
-  app.post("/api/credentials/generate-csr", generateArcaCsr)
-} else {
-  app.post(
-    "/api/credentials/generate-csr",
-    credentialsCsrRateLimit,
-    generateArcaCsr
-  )
-}
+app.post(
+  "/api/credentials/generate-csr",
+  credentialsCsrRateLimit,
+  generateArcaCsr
+)
 app.post("/api/credentials/save", saveArcaCredentials)
 app.post("/api/invoices/emit", invoiceEmitRateLimit, emitInvoice)
 app.get("/api/invoices/arca/annual-summary", getAnnualArcaSummary)

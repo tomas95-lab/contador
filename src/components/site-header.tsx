@@ -3,6 +3,7 @@ import { CalendarDaysIcon, DatabaseIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
+import { ThemeToggle } from "@/components/theme-toggle"
 import { cn } from "@/lib/utils"
 
 type SiteHeaderProps = {
@@ -62,6 +63,7 @@ export function SiteHeader({
           <DatabaseIcon />
           {dataStatusLabel[dataStatus]}
         </Badge>
+        <ThemeToggle />
       </div>
     </header>
   )

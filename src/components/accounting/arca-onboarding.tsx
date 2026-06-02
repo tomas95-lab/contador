@@ -19,6 +19,7 @@ import {
 } from "lucide-react"
 
 import { HelpView } from "@/components/help-view"
+import { ThemeToggle } from "@/components/theme-toggle"
 import {
   Accordion,
   AccordionContent,
@@ -36,6 +37,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
@@ -74,6 +82,9 @@ const stepperSteps: {
 const arcaLoginUrl =
   (import.meta.env.VITE_ARCA_ONBOARDING_URL as string | undefined) ??
   "https://auth.afip.gob.ar/contribuyente_/login.xhtml"
+const onboardingTutorialEmbedUrl =
+  "https://www.youtube-nocookie.com/embed/uEnpdpVFYlQ?rel=0&modestbranding=1"
+const onboardingTutorialWatchUrl = "https://youtu.be/uEnpdpVFYlQ"
 
 export function ArcaOnboarding({
   onComplete,
@@ -82,6 +93,7 @@ export function ArcaOnboarding({
 }: ArcaOnboardingProps) {
   const isMobile = useIsMobile()
   const [isHelpOpen, setIsHelpOpen] = React.useState(false)
+  const [isTutorialOpen, setIsTutorialOpen] = React.useState(false)
   const [cuit, setCuit] = React.useState("")
   const [csr, setCsr] = React.useState("")
   const [certificate, setCertificate] = React.useState("")
@@ -200,6 +212,16 @@ export function ArcaOnboarding({
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
+              <ThemeToggle />
+              <Button
+                className="border-[#B5D4F4] bg-background/80 text-[#0C447C] hover:bg-background dark:border-[#B5D4F4]/40 dark:bg-background/10 dark:text-[#E6F1FB] dark:hover:bg-background/20"
+                onClick={() => setIsTutorialOpen(true)}
+                type="button"
+                variant="outline"
+              >
+                <PlayCircleIcon />
+                Ver tutorial
+              </Button>
               <Button
                 className="bg-[#185FA5] text-white hover:bg-[#0C447C]"
                 onClick={() => setIsHelpOpen(true)}
@@ -246,6 +268,11 @@ export function ArcaOnboarding({
             </div>
           </SheetContent>
         </Sheet>
+
+        <TutorialVideoDialog
+          onOpenChange={setIsTutorialOpen}
+          open={isTutorialOpen}
+        />
 
         {/* ── Stepper ── */}
         <Stepper currentStep={currentStep} />
@@ -678,6 +705,28 @@ export function ArcaOnboarding({
               </CardContent>
             </Card>
 
+            <Card className="overflow-hidden rounded-xl border-[#B5D4F4] shadow-none dark:border-[#185FA5]/60 pt-0">
+              <CardHeader className="bg-[#E6F1FB] pb-3 dark:bg-[#0C447C]/35">
+                <CardTitle className="text-base text-[#0C447C] dark:text-[#E6F1FB]">
+                  Video tutorial
+                </CardTitle>
+                <CardDescription className="text-[#0C447C]/75 dark:text-[#E6F1FB]/75">
+                  Mirá el recorrido completo antes de entrar a ARCA.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-4">
+                <Button
+                  className="w-full border-[#B5D4F4] text-[#0C447C] hover:bg-[#E6F1FB] dark:border-[#185FA5]/60 dark:text-[#E6F1FB] dark:hover:bg-[#185FA5]/20"
+                  onClick={() => setIsTutorialOpen(true)}
+                  type="button"
+                  variant="outline"
+                >
+                  <PlayCircleIcon />
+                  Ver tutorial
+                </Button>
+              </CardContent>
+            </Card>
+
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm dark:border-amber-900/60 dark:bg-amber-950/40">
               <div className="mb-2 flex items-center gap-2 font-semibold text-amber-800 dark:text-amber-300">
                 <Clock3Icon className="size-4" />
@@ -745,6 +794,7 @@ function MobileArcaTransfer({
   onDemoClick: () => void
 }) {
   const [copied, setCopied] = React.useState(false)
+  const [isTutorialOpen, setIsTutorialOpen] = React.useState(false)
 
   async function handleCopyLink() {
     await navigator.clipboard.writeText(window.location.origin + "/app")
@@ -766,71 +816,136 @@ function MobileArcaTransfer({
   }
 
   return (
-    <main className="flex min-h-svh items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md rounded-xl border-[#B5D4F4] shadow-none dark:border-[#185FA5]/60">
-        <CardHeader className="items-center gap-3 text-center">
-          <div className="flex size-14 items-center justify-center rounded-full bg-[#E6F1FB] text-[#185FA5] dark:bg-[#0C447C]/35 dark:text-[#B5D4F4]">
-            <MonitorIcon className="size-7" />
+    <>
+      <main className="flex min-h-svh items-center justify-center bg-background p-4">
+        <div className="absolute top-4 right-4">
+          <ThemeToggle />
+        </div>
+        <Card className="w-full max-w-md rounded-xl border-[#B5D4F4] shadow-none dark:border-[#185FA5]/60">
+          <CardHeader className="items-center gap-3 text-center">
+            <div className="flex size-14 items-center justify-center rounded-full bg-[#E6F1FB] text-[#185FA5] dark:bg-[#0C447C]/35 dark:text-[#B5D4F4]">
+              <MonitorIcon className="size-7" />
+            </div>
+            <div>
+              <CardTitle className="text-xl text-[#0C447C] dark:text-[#E6F1FB]">
+                Conectá ARCA desde tu computadora
+              </CardTitle>
+              <CardDescription className="mt-2 text-sm leading-6">
+                Este proceso requiere descargar certificados y navegar ARCA. Es
+                muy difícil desde el celular — guardá el link y seguí desde tu
+                compu.
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-2">
+            <Button
+              className="bg-[#185FA5] text-white hover:bg-[#0C447C]"
+              onClick={() => setIsTutorialOpen(true)}
+              type="button"
+            >
+              <PlayCircleIcon />
+              Ver tutorial
+            </Button>
+            <Button
+              className="border-[#B5D4F4] text-[#0C447C] hover:bg-[#E6F1FB] dark:border-[#185FA5]/60 dark:text-[#E6F1FB] dark:hover:bg-[#185FA5]/20"
+              onClick={() => void handleCopyLink()}
+              type="button"
+              variant="outline"
+            >
+              <CopyIcon />
+              {copied ? "Copiado ✓" : "Copiar link"}
+            </Button>
+            <Button
+              className="border-[#B5D4F4] text-[#0C447C] hover:bg-[#E6F1FB] dark:border-[#185FA5]/60 dark:text-[#E6F1FB] dark:hover:bg-[#185FA5]/20"
+              onClick={handleEmailLink}
+              type="button"
+              variant="outline"
+            >
+              <MailIcon />
+              Enviar por email
+            </Button>
+            <Button
+              className="border-[#B5D4F4] text-[#0C447C] hover:bg-[#E6F1FB] dark:border-[#185FA5]/60 dark:text-[#E6F1FB] dark:hover:bg-[#185FA5]/20"
+              onClick={handleWhatsAppLink}
+              type="button"
+              variant="outline"
+            >
+              <MessageCircleIcon />
+              Enviar por WhatsApp
+            </Button>
+            <Button
+              className="border-[#C0DD97] bg-[#EAF3DE] text-[#27500A] hover:bg-[#dcebc9] dark:border-[#C0DD97]/40 dark:bg-[#27500A]/35 dark:text-[#EAF3DE] dark:hover:bg-[#27500A]/50"
+              onClick={onDemoClick}
+              type="button"
+              variant="outline"
+            >
+              <PlayCircleIcon />
+              Probar demo sin conectar ARCA
+            </Button>
+            <Button
+              className="border-[#B5D4F4] text-muted-foreground hover:bg-[#E6F1FB] hover:text-[#0C447C] dark:border-[#185FA5]/60 dark:hover:bg-[#185FA5]/20 dark:hover:text-[#E6F1FB]"
+              onClick={onContinueMobile}
+              type="button"
+              variant="outline"
+            >
+              <ArrowRightIcon />
+              Prefiero hacerlo desde mi celular
+            </Button>
+          </CardContent>
+        </Card>
+      </main>
+      <TutorialVideoDialog
+        onOpenChange={setIsTutorialOpen}
+        open={isTutorialOpen}
+      />
+    </>
+  )
+}
+
+function TutorialVideoDialog({
+  onOpenChange,
+  open,
+}: {
+  onOpenChange: (open: boolean) => void
+  open: boolean
+}) {
+  return (
+    <Dialog onOpenChange={onOpenChange} open={open}>
+      <DialogContent className="max-w-4xl overflow-hidden p-0">
+        <DialogHeader className="px-5 pt-5 pr-12">
+          <DialogTitle>Tutorial de conexión ARCA</DialogTitle>
+          <DialogDescription>
+            Video guía para completar el onboarding paso a paso.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="px-5 pb-5">
+          <div className="aspect-video overflow-hidden rounded-lg bg-black">
+            <iframe
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+              className="size-full border-0"
+              referrerPolicy="strict-origin-when-cross-origin"
+              src={onboardingTutorialEmbedUrl}
+              title="Tutorial de conexión ARCA"
+            />
           </div>
-          <div>
-            <CardTitle className="text-xl text-[#0C447C] dark:text-[#E6F1FB]">
-              Conectá ARCA desde tu computadora
-            </CardTitle>
-            <CardDescription className="mt-2 text-sm leading-6">
-              Este proceso requiere descargar certificados y navegar ARCA. Es
-              muy difícil desde el celular — guardá el link y seguí desde tu
-              compu.
-            </CardDescription>
-          </div>
-        </CardHeader>
-        <CardContent className="grid gap-2">
           <Button
-            className="bg-[#185FA5] text-white hover:bg-[#0C447C]"
-            onClick={() => void handleCopyLink()}
-            type="button"
-          >
-            <CopyIcon />
-            {copied ? "Copiado ✓" : "Copiar link"}
-          </Button>
-          <Button
-            className="border-[#B5D4F4] text-[#0C447C] hover:bg-[#E6F1FB] dark:border-[#185FA5]/60 dark:text-[#E6F1FB] dark:hover:bg-[#185FA5]/20"
-            onClick={handleEmailLink}
-            type="button"
+            asChild
+            className="mt-3 border-[#B5D4F4] text-[#0C447C] hover:bg-[#E6F1FB] dark:border-[#185FA5]/60 dark:text-[#E6F1FB] dark:hover:bg-[#185FA5]/20"
             variant="outline"
           >
-            <MailIcon />
-            Enviar por email
+            <a
+              href={onboardingTutorialWatchUrl}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <ExternalLinkIcon />
+              Abrir en YouTube
+            </a>
           </Button>
-          <Button
-            className="border-[#B5D4F4] text-[#0C447C] hover:bg-[#E6F1FB] dark:border-[#185FA5]/60 dark:text-[#E6F1FB] dark:hover:bg-[#185FA5]/20"
-            onClick={handleWhatsAppLink}
-            type="button"
-            variant="outline"
-          >
-            <MessageCircleIcon />
-            Enviar por WhatsApp
-          </Button>
-          <Button
-            className="border-[#C0DD97] bg-[#EAF3DE] text-[#27500A] hover:bg-[#dcebc9] dark:border-[#C0DD97]/40 dark:bg-[#27500A]/35 dark:text-[#EAF3DE] dark:hover:bg-[#27500A]/50"
-            onClick={onDemoClick}
-            type="button"
-            variant="outline"
-          >
-            <PlayCircleIcon />
-            Probar demo sin conectar ARCA
-          </Button>
-          <Button
-            className="border-[#B5D4F4] text-muted-foreground hover:bg-[#E6F1FB] hover:text-[#0C447C] dark:border-[#185FA5]/60 dark:hover:bg-[#185FA5]/20 dark:hover:text-[#E6F1FB]"
-            onClick={onContinueMobile}
-            type="button"
-            variant="outline"
-          >
-            <ArrowRightIcon />
-            Prefiero hacerlo desde mi celular
-          </Button>
-        </CardContent>
-      </Card>
-    </main>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 

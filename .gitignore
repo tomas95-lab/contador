@@ -29,6 +29,8 @@ certs/
 server/certs/
 .arca-cache/
 *.md
+!README.md
+!DOCUMENTACION.md
 # Logs and local runtime files
 logs/
 *.log

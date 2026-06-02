@@ -6,6 +6,7 @@ import {
 } from "lucide-react"
 
 import { LoginForm } from "@/components/login-form"
+import { ThemeToggle } from "@/components/theme-toggle"
 import { brandAssets } from "@/lib/brand-assets"
 
 type AuthScreenProps = {
@@ -41,7 +42,7 @@ export function AuthScreen({ canUseEmailAuth, onUseDemo }: AuthScreenProps) {
     <div className="grid min-h-svh lg:grid-cols-2">
       {/* ── Columna izquierda: formulario ── */}
       <div className="flex flex-col gap-4 p-6 md:p-10">
-        <div className="flex justify-center gap-2 md:justify-start">
+        <div className="flex items-center justify-between gap-3">
           <a aria-label="contable." className="block" href="#">
             <img
               alt="contable."
@@ -49,6 +50,7 @@ export function AuthScreen({ canUseEmailAuth, onUseDemo }: AuthScreenProps) {
               src={brandAssets.lockup.navy}
             />
           </a>
+          <ThemeToggle />
         </div>
         <div className="flex flex-1 items-center justify-center">
           <div className="w-full max-w-xs">

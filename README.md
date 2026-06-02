@@ -69,6 +69,7 @@ Tecnologicamente, Contable separa la interfaz React del backend Express que habl
 
 - Autenticacion con Supabase Auth.
 - Onboarding ARCA completo: generacion de CSR, certificados y puntos de venta.
+- Tutorial embebido para guiar el alta ARCA paso a paso.
 - Facturacion C y E conectada a ARCA real con CAE.
 - Radar de categoria con proyeccion y semaforo de riesgo.
 - Alertas fiscales persistentes.
@@ -77,6 +78,7 @@ Tecnologicamente, Contable separa la interfaz React del backend Express que habl
 - Traductor de errores ARCA a lenguaje humano.
 - Multi-usuario con credenciales ARCA cifradas por usuario.
 - Dashboard con historial importado desde ARCA.
+- Modo claro por defecto y modo oscuro con toggle dentro de la app.
 
 ## Requisitos Previos
 
@@ -166,6 +168,7 @@ Nunca commitear `.env.local`, certificados, private keys, service role keys ni t
 | `VITE_SUPABASE_ANON_KEY`         | Si        | `<SUPABASE_ANON_KEY>`               | Clave anon/public para inicializar Supabase JS en el navegador.   |
 | `VITE_ARCA_API_URL`              | Si        | `http://localhost:3001`             | URL del backend Express. En produccion apunta a Render.           |
 | `VITE_CONTA_CUIT`                | No        | `XX-XXXXXXXX-X`                     | CUIT visible de referencia en pantallas de onboarding.            |
+| `VITE_ARCA_ONBOARDING_URL`       | No        | `https://auth.afip.gob.ar/contribuyente_/login.xhtml` | URL que abre el boton "Abrir ARCA" durante el onboarding. |
 | `VITE_ARCA_WSFE_POINTS`          | No        | `4,5`                               | Puntos de venta WSFE a consultar desde el cliente. Default: `4`.  |
 | `VITE_ARCA_WSFEX_POINTS`         | No        | `3`                                 | Puntos de venta WSFEX a consultar desde el cliente. Default: `3`. |
 
@@ -174,7 +177,7 @@ Nunca commitear `.env.local`, certificados, private keys, service role keys ni t
 | Variable                                 | Requerida  | Placeholder                                           | Descripcion                                                                      |
 | ---------------------------------------- | ---------- | ----------------------------------------------------- | -------------------------------------------------------------------------------- |
 | `PORT`                                   | No         | `3001`                                                | Puerto local del backend. Render inyecta su propio puerto.                       |
-| `CORS_ORIGIN`                            | Si         | `http://localhost:5173`                               | Origins permitidos, separados por coma. No incluir slash final.                  |
+| `CORS_ORIGIN`                            | Si         | `http://localhost:5173,http://127.0.0.1:5173`         | Origins permitidos, separados por coma. No incluir slash final.                  |
 | `SUPABASE_URL`                           | Si         | `https://<project-ref>.supabase.co`                   | URL del proyecto Supabase usada por backend y JWKS.                              |
 | `SUPABASE_SERVICE_ROLE_KEY`              | Si         | `<SUPABASE_SERVICE_ROLE_KEY>`                         | Clave service role para operaciones server-side. Solo backend.                   |
 | `ARCA_ENCRYPTION_KEY`                    | Si         | `<LONG_RANDOM_SECRET>`                                | Master key usada por RPCs de Supabase para cifrar credenciales ARCA por usuario. |
@@ -243,11 +246,22 @@ El flujo principal guarda las credenciales ARCA por usuario en Supabase, cifrada
 | `npm run typecheck`        | Typecheck general del proyecto.                     |
 | `npm run preview`          | Sirve localmente el build de Vite.                  |
 
+## Marca Y Tema
+
+- Los logos activos viven en `public/logo/logos/` y corresponden a la familia D.
+- `src/lib/brand-assets.ts` centraliza las rutas de icon, lockup y wordmark para evitar hardcodear assets en componentes.
+- `index.html` usa `public/logo/logos/icon/D-navy-32.png` como favicon.
+- El tema default es `light`. No se usa el modo `system` ni el atajo por teclado `D`.
+- El toggle claro/oscuro esta en `src/components/theme-toggle.tsx` y se muestra en la app, auth y onboarding. La landing publica no muestra toggle.
+- La preferencia queda persistida en `localStorage` con la key `theme`.
+- Los colores de dark mode estan definidos en `src/index.css` como un navy oscuro suave, no negro puro.
+
 ## Estructura Del Proyecto
 
 ```text
 .
 |-- public/                         # Assets publicos
+|   `-- logo/logos/                 # Logos activos: familia D, icon, lockup y wordmark
 |-- server/                         # Backend Express
 |   |-- arca/                       # Clientes WSAA, WSFE, WSFEX, SOAP y errores
 |   |-- lib/                        # Integracion Supabase y cifrado de credenciales
@@ -260,6 +274,7 @@ El flujo principal guarda las credenciales ARCA por usuario en Supabase, cifrada
 |   |-- hooks/                      # Hooks compartidos
 |   |-- lib/                        # Clientes Supabase, backend, ARCA e IA
 |   |-- types/                      # Tipos de dominio
+|   |-- index.css                   # Tailwind, tokens shadcn y tema claro/oscuro
 |   `-- App.tsx                     # Shell principal
 |-- supabase/
 |   |-- functions/claude-chat/      # Edge Function de Conta
@@ -278,13 +293,21 @@ El flujo principal guarda las credenciales ARCA por usuario en Supabase, cifrada
 
 1. El usuario inicia sesion con Supabase Auth. El frontend llama al backend con el JWT de Supabase en `Authorization: Bearer <token>`.
 2. El backend valida el JWT con JWKS de Supabase y algoritmo ES256. Si el token es valido, asocia la operacion a `req.userId`.
-3. Para iniciar ARCA, el usuario pide generar un CSR. El backend crea un par RSA de 2048 bits con `node-forge`, firma el CSR y conserva temporalmente la private key en memoria por usuario durante 10 minutos.
-4. El usuario sube el CSR en ARCA y obtiene el certificado. Luego carga el certificado en Contable junto con los puntos de venta WSFE/WSFEX.
-5. El backend valida que el certificado corresponda al CSR/private key generados y que el CUIT coincida.
-6. Las credenciales se guardan en Supabase en `user_arca_credentials`, cifradas por RPC con `ARCA_ENCRYPTION_KEY`.
-7. Al emitir o consultar comprobantes, el backend recupera y descifra las credenciales del usuario, obtiene token/autorizacion via WSAA y llama a WSFE o WSFEX segun corresponda.
+3. En el paso 1, el usuario ingresa su CUIT y pide generar un CSR. `POST /api/credentials/generate-csr` tiene limite real de 3 solicitudes por hora por usuario autenticado.
+4. El backend crea un par RSA de 2048 bits con `node-forge`, firma el CSR y conserva temporalmente la private key en memoria por usuario durante 10 minutos.
+5. La pantalla permite copiar o descargar el CSR como `conta-<cuit>.csr`.
+6. En el paso 2, el usuario abre ARCA con `VITE_ARCA_ONBOARDING_URL`, carga el CSR, autoriza los Web Services necesarios y crea/anota los puntos de venta.
+7. El onboarding incluye un tutorial embebido desde YouTube (`https://youtu.be/uEnpdpVFYlQ`) y un link externo para verlo fuera de la app.
+8. En el paso 3, el usuario sube el certificado `.crt`, `.cer` o `.pem` emitido por ARCA e ingresa los puntos de venta WSFE y, opcionalmente, WSFEX.
+9. El backend valida que el certificado corresponda al CSR/private key generados y que el CUIT coincida.
+10. Las credenciales se guardan en Supabase en `user_arca_credentials`, cifradas por RPC con `ARCA_ENCRYPTION_KEY`.
+11. Al emitir o consultar comprobantes, el backend recupera y descifra las credenciales del usuario, obtiene token/autorizacion via WSAA y llama a WSFE o WSFEX segun corresponda.
 
-Nota: si el backend se reinicia antes de subir el certificado, la private key temporal se pierde y el usuario debe generar un nuevo CSR.
+Notas operativas:
+
+- Si el backend se reinicia antes de subir el certificado, la private key temporal se pierde y el usuario debe generar un nuevo CSR.
+- No existe flag de produccion para desactivar el limite de CSR ni para devolver CSR ficticios. El onboarding siempre usa CSR reales.
+- ARCA puede bloquear links profundos o externos; por eso la app abre la pantalla de login y tambien indica entrar manualmente a `arca.gob.ar` si hace falta.
 
 ## Deploy
 
@@ -306,8 +329,9 @@ VITE_SUPABASE_URL=<SUPABASE_URL>
 VITE_SUPABASE_ANON_KEY=<SUPABASE_ANON_KEY>
 VITE_ARCA_API_URL=<RENDER_BACKEND_URL>
 VITE_CONTA_CUIT=<CUIT_DISPLAY>
-VITE_ARCA_WSFE_POINTS=<WSFE_POINTS>
-VITE_ARCA_WSFEX_POINTS=<WSFEX_POINTS>
+VITE_ARCA_ONBOARDING_URL=https://auth.afip.gob.ar/contribuyente_/login.xhtml
+VITE_ARCA_WSFE_POINTS=<WSFE_POINTS_OPTIONAL>
+VITE_ARCA_WSFEX_POINTS=<WSFEX_POINTS_OPTIONAL>
 ```
 
 ### Backend En Render
@@ -371,6 +395,7 @@ supabase functions deploy claude-chat
 - Las credenciales ARCA se guardan por usuario y cifradas antes de persistirse.
 - `ARCA_ENCRYPTION_KEY` debe ser larga, aleatoria y exclusiva del ambiente.
 - El CSR guarda la private key temporalmente en memoria y expira a los 10 minutos.
+- El limite de generacion de CSR es parte del comportamiento de produccion: 3 solicitudes por usuario por hora.
 - CORS debe configurarse con origins exactos, sin slash final y separados por coma.
 - La Edge Function de IA restringe CORS y limita la busqueda web a `arca.gob.ar`.
 - Los errores ARCA se traducen a mensajes accionables sin exponer detalles sensibles innecesarios.
