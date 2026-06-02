@@ -45,11 +45,24 @@ function optionalIntFromEnv(name: string): number | undefined {
   return parsed
 }
 
+function boolFromEnv(name: string, fallback = false): boolean {
+  const value = process.env[name]
+  if (!value) {
+    return fallback
+  }
+
+  return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase())
+}
+
 function resolvePath(value: string): string {
   return path.isAbsolute(value) ? value : path.resolve(process.cwd(), value)
 }
 
 const environment = parseEnvironment(process.env.ARCA_ENV)
+const onboardingVideoFilePath = process.env.ONBOARDING_VIDEO_FILE_PATH
+const onboardingVideoDirectory = onboardingVideoFilePath
+  ? path.dirname(resolvePath(onboardingVideoFilePath))
+  : undefined
 
 const homologacion = {
   wsaaUrl:
@@ -78,6 +91,10 @@ const production = {
 export const config = {
   port: intFromEnv("PORT", 3001),
   corsOrigin: process.env.CORS_ORIGIN,
+  demo: {
+    disableCsrRateLimit: boolFromEnv("ARCA_DISABLE_CSR_RATE_LIMIT"),
+    onboardingVideoDirectory,
+  },
   arca: {
     environment,
     cmsDigest: (process.env.ARCA_CMS_DIGEST ?? "sha256").toLowerCase(),

@@ -1,8 +1,9 @@
 import * as React from "react"
 import { Link } from "react-router-dom"
-import { Clock, Menu, Receipt, X } from "lucide-react"
+import { Clock, Menu, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { brandAssets } from "@/lib/brand-assets"
 
 type NavbarProps = {
   onOpenWaitlist: () => void
@@ -43,14 +44,12 @@ export function Navbar({ onOpenWaitlist }: NavbarProps) {
     >
       <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link className="group flex items-center gap-3" to="/">
-          <div className="relative grid size-11 place-items-center rounded-2xl bg-white shadow-lg transition-transform duration-300 group-hover:scale-105">
-            <Receipt className="size-5 text-[#185FA5]" />
-            <span className="absolute -top-1 -right-1 size-3 rounded-full bg-[#3CC68A]" />
-          </div>
-          <div className="flex flex-col leading-none">
-            <span className="landing-text-gradient text-2xl font-black">
-              contable.
-            </span>
+          <img
+            alt="contable."
+            className="h-10 w-auto transition-transform duration-300 group-hover:scale-[1.03]"
+            src={brandAssets.lockup.navy}
+          />
+          <div className="hidden flex-col leading-none sm:flex">
             <span className="-mt-0.5 text-xs font-medium text-[#6B6B6B]">
               Radar fiscal
             </span>

@@ -22,6 +22,7 @@ import {
   TrendingUpIcon,
   UsersRoundIcon,
 } from "lucide-react"
+import { brandAssets } from "@/lib/brand-assets"
 import type { AppSection } from "@/types/accounting"
 
 const navMainItems: {
@@ -123,11 +124,14 @@ export function AppSidebar({
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
-              className="data-[slot=sidebar-menu-button]:p-1.5!"
+              className="data-[slot=sidebar-menu-button]:h-10! data-[slot=sidebar-menu-button]:p-1.5!"
               onClick={() => onSectionChange("resumen")}
             >
-              <ReceiptIcon className="size-5!" />
-              <span className="text-base font-semibold">contable.</span>
+              <img
+                alt="contable."
+                className="h-7 w-auto"
+                src={brandAssets.lockup.navy}
+              />
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

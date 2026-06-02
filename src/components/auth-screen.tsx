@@ -6,6 +6,7 @@ import {
 } from "lucide-react"
 
 import { LoginForm } from "@/components/login-form"
+import { brandAssets } from "@/lib/brand-assets"
 
 type AuthScreenProps = {
   canUseEmailAuth: boolean
@@ -41,11 +42,12 @@ export function AuthScreen({ canUseEmailAuth, onUseDemo }: AuthScreenProps) {
       {/* ── Columna izquierda: formulario ── */}
       <div className="flex flex-col gap-4 p-6 md:p-10">
         <div className="flex justify-center gap-2 md:justify-start">
-          <a className="flex items-center gap-2 font-semibold" href="#">
-            <div className="flex size-6 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <ReceiptTextIcon className="size-3.5" />
-            </div>
-            contable.
+          <a aria-label="contable." className="block" href="#">
+            <img
+              alt="contable."
+              className="h-8 w-auto"
+              src={brandAssets.lockup.navy}
+            />
           </a>
         </div>
         <div className="flex flex-1 items-center justify-center">
@@ -65,12 +67,11 @@ export function AuthScreen({ canUseEmailAuth, onUseDemo }: AuthScreenProps) {
         <div className="pointer-events-none absolute -bottom-32 -left-16 size-[480px] rounded-full bg-[#185FA5]/25" />
 
         {/* Logo */}
-        <div className="relative flex items-center gap-2">
-          <div className="flex size-6 items-center justify-center rounded-md bg-white/15 text-white">
-            <ReceiptTextIcon className="size-3.5" />
-          </div>
-          <span className="text-sm font-semibold text-white/90">contable.</span>
-        </div>
+        <img
+          alt="contable."
+          className="relative h-8 w-fit"
+          src={brandAssets.lockup.white}
+        />
 
         {/* Contenido central */}
         <div className="relative space-y-8">

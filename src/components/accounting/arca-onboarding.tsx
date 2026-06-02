@@ -71,7 +71,9 @@ const stepperSteps: {
   { number: 3, label: "Guardar conexión", where: "Acá en la app" },
 ]
 
-const arcaLoginUrl = "https://auth.afip.gob.ar/contribuyente_/login.xhtml"
+const arcaLoginUrl =
+  (import.meta.env.VITE_ARCA_ONBOARDING_URL as string | undefined) ??
+  "https://auth.afip.gob.ar/contribuyente_/login.xhtml"
 
 export function ArcaOnboarding({
   onComplete,
