@@ -1,5 +1,6 @@
 import * as React from "react"
 
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
   Card,
   CardContent,
@@ -25,6 +26,7 @@ import {
   getTaxDueHistory,
   type FinancialMetrics,
 } from "@/lib/accounting"
+import { professionalDisclaimer } from "@/lib/legal-copy"
 import { cn } from "@/lib/utils"
 import type {
   AppSection,
@@ -79,6 +81,11 @@ export function DashboardView({
 
   return (
     <div className="flex flex-col gap-4 md:gap-6">
+      <Alert className="border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100">
+        <AlertDescription className="text-amber-800 dark:text-amber-200">
+          {professionalDisclaimer}
+        </AlertDescription>
+      </Alert>
       <RiskStatusCard
         category={category}
         metrics={metrics}
@@ -99,7 +106,7 @@ export function DashboardView({
         <div className="flex flex-col gap-4">
           <Card className="rounded-lg shadow-none">
             <CardHeader>
-          <CardTitle>Categoría fiscal</CardTitle>
+              <CardTitle>Categoría fiscal</CardTitle>
               <CardDescription>
                 {metrics.evaluationPeriod.statusLabel}
               </CardDescription>

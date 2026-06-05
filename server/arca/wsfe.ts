@@ -1,5 +1,6 @@
 import { config } from "../config.js"
 import type { UserArcaCredentials } from "../lib/arca-credentials.js"
+import { normalizeCuit } from "../lib/cuit.js"
 import { fromArcaDate, roundMoney, toArcaDate } from "./date.js"
 import { ArcaError, asArray, isArcaAuthenticationError } from "./errors.js"
 import { record } from "./objects.js"
@@ -162,7 +163,7 @@ async function emitFacturaCOnce(
   )
   const amount = roundMoney(input.amount)
   const today = toArcaDate()
-  const clientCuit = input.clientCuit?.replace(/\D/g, "")
+  const clientCuit = input.clientCuit ? normalizeCuit(input.clientCuit) : ""
   const receiverIvaConditionId =
     input.receiverIvaConditionId ??
     (clientCuit ? config.arca.defaultReceiverIvaConditionId : 5)

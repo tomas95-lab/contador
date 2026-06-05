@@ -55,7 +55,9 @@ const allowedOrigins = config.corsOrigin
 const globalRateLimit = rateLimit({
   legacyHeaders: false,
   limit: 100,
-  message: { error: "Recibimos demasiados pedidos. Esperá un minuto y volvé a intentar." },
+  message: {
+    error: "Recibimos demasiados pedidos. Esperá un minuto y volvé a intentar.",
+  },
   standardHeaders: "draft-8",
   windowMs: 60 * 1000,
 })
@@ -77,6 +79,17 @@ const invoiceEmitRateLimit = rateLimit({
   message: {
     error:
       "Recibimos demasiados pedidos de emisión. Esperá un minuto y volvé a intentar.",
+  },
+  standardHeaders: "draft-8",
+  windowMs: 60 * 1000,
+})
+const arcaQueryRateLimit = rateLimit({
+  keyGenerator: getAuthenticatedRateLimitKey,
+  legacyHeaders: false,
+  limit: 5,
+  message: {
+    error:
+      "Recibimos demasiadas consultas a ARCA. Esperá un minuto y volvé a intentar.",
   },
   standardHeaders: "draft-8",
   windowMs: 60 * 1000,
@@ -107,9 +120,21 @@ app.post(
 )
 app.post("/api/credentials/save", saveArcaCredentials)
 app.post("/api/invoices/emit", invoiceEmitRateLimit, emitInvoice)
-app.get("/api/invoices/arca/annual-summary", getAnnualArcaSummary)
-app.get("/api/invoices/arca/historical", getHistoricalArcaInvoices)
-app.get("/api/invoices/arca/points-of-sale", getArcaPointOfSales)
+app.get(
+  "/api/invoices/arca/annual-summary",
+  arcaQueryRateLimit,
+  getAnnualArcaSummary
+)
+app.get(
+  "/api/invoices/arca/historical",
+  arcaQueryRateLimit,
+  getHistoricalArcaInvoices
+)
+app.get(
+  "/api/invoices/arca/points-of-sale",
+  arcaQueryRateLimit,
+  getArcaPointOfSales
+)
 
 async function authenticateJwt(
   req: Request,

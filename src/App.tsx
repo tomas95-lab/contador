@@ -4,7 +4,6 @@ import type { Session } from "@supabase/supabase-js"
 import { AuthScreen } from "@/components/auth-screen"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SiteHeader } from "@/components/site-header"
-import { Button } from "@/components/ui/button"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -182,8 +181,9 @@ export default function App() {
     React.useState<UserFiscalProfile>(emptyFiscalProfile)
   const [category, setCategory] =
     React.useState<TaxCategory>(currentTaxCategory)
-  const [allCategories, setAllCategories] =
-    React.useState<TaxCategory[]>(fallbackTaxCategories)
+  const [allCategories, setAllCategories] = React.useState<TaxCategory[]>(
+    fallbackTaxCategories
+  )
   const [taxPayments, setTaxPayments] = React.useState<TaxPayment[]>([])
   const [taxDueActionMonthKey, setTaxDueActionMonthKey] = React.useState<
     string | null
@@ -713,10 +713,11 @@ export default function App() {
       try {
         const arcaInvoice = await emitArcaInvoice({
           amount: payment.amount,
+          paymentId: payment.id,
           currencyId: options.currencyId,
           exchangeRate: options.exchangeRate,
           clientCuit: options.clientCuit,
-          clientName: options.clientName,
+          clientName: options.clientName ?? payment.client,
           clientAddress: options.clientAddress,
           clientTaxId: options.clientTaxId,
           destinationCountryCode: options.destinationCountryCode,
@@ -919,14 +920,6 @@ export default function App() {
         avatar: "",
       }
 
-  if (shouldUseSupabase && arcaCredentialsStatus === "loading") {
-    return (
-      <div className="flex min-h-svh items-center justify-center bg-background text-sm text-muted-foreground">
-        Verificando conexión con ARCA...
-      </div>
-    )
-  }
-
   if (shouldUseSupabase && arcaCredentialsStatus === "missing") {
     return (
       <React.Suspense fallback={<LazySectionFallback />}>
@@ -944,23 +937,6 @@ export default function App() {
           onSignOut={() => void handleSignOut()}
         />
       </React.Suspense>
-    )
-  }
-
-  if (shouldUseSupabase && arcaCredentialsStatus === "error") {
-    return (
-      <div className="flex min-h-svh items-center justify-center bg-background p-4">
-        <div className="max-w-md rounded-lg border bg-card p-4 text-sm shadow-sm">
-          <div className="font-medium">No se pudo verificar ARCA</div>
-          <p className="mt-2 text-muted-foreground">
-            Revisá tu conexión y volvé a intentarlo. Si administrás esta
-            instalación, verificá que el servidor esté configurado.
-          </p>
-          <Button className="mt-4" onClick={() => void handleSignOut()}>
-            Salir
-          </Button>
-        </div>
-      </div>
     )
   }
 

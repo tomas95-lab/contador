@@ -1,6 +1,5 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js"
-
 import { ArcaError } from "../arca/errors.js"
+import { getSupabaseAdmin, requiredEnv } from "./supabase-admin.js"
 
 const CREDENTIALS_CACHE_TTL_MS = 5 * 60 * 1000
 const ENCRYPTED_CREDENTIAL_PREFIX = "pgcrypto:v1:"
@@ -29,7 +28,6 @@ type CachedCredentials = {
 }
 
 const credentialsCache = new Map<string, CachedCredentials>()
-let supabaseAdmin: SupabaseClient | null = null
 
 export function assertArcaEncryptionConfigured() {
   getArcaEncryptionKey()
@@ -219,36 +217,4 @@ function normalizePem(value: string) {
 
 function getArcaEncryptionKey() {
   return requiredEnv("ARCA_ENCRYPTION_KEY", process.env.ARCA_ENCRYPTION_KEY)
-}
-
-function getSupabaseAdmin() {
-  if (supabaseAdmin) {
-    return supabaseAdmin
-  }
-
-  const supabaseUrl = requiredEnv(
-    "SUPABASE_URL",
-    process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL
-  )
-  const serviceRoleKey = requiredEnv(
-    "SUPABASE_SERVICE_ROLE_KEY",
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-  )
-
-  supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  })
-
-  return supabaseAdmin
-}
-
-function requiredEnv(name: string, value: string | undefined) {
-  if (!value) {
-    throw new Error(`${name} is required.`)
-  }
-
-  return value
 }

@@ -109,11 +109,12 @@ class UnauthorizedError extends Error {
   }
 }
 
-const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") ?? "http://localhost:5173"
+const allowedOrigins = parseAllowedOrigins(
+  Deno.env.get("ALLOWED_ORIGIN") ?? "http://localhost:5173"
+)
 let jwksPromise: Promise<JwksResponse> | null = null
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
+const baseCorsHeaders = {
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -130,10 +131,14 @@ IDENTIDAD
 - No sos un chatbot genérico: sos un especialista fiscal enfocado en diagnóstico y próximos pasos.
 
 ALCANCE
-Respondés sobre monotributo argentino, AFIP/ARCA, facturación, Factura C, Factura E, categorías, recategorización, vencimientos, cobros, riesgos fiscales y finanzas relacionadas con impuestos.
+Respondés sobre monotributo argentino, AFIP/ARCA, facturación, Factura C, Factura E, categorías, recategorización, vencimientos, cobros, riesgos fiscales y finanzas del usuario relacionadas con su actividad económica.
+
+Sé permisivo con el alcance cuando la pregunta tenga conexión razonable con dinero, trabajo, ingresos, cobros, plataformas de pago, bancos, billeteras, transferencias, clientes, exportación de servicios, registración de operaciones, planificación financiera, impuestos o cumplimiento fiscal. Ejemplos dentro de alcance: Scale AI, Airtm, PayPal, Payoneer, Wise, Stripe, Mercado Pago, bancos, tipo de cambio, a quién facturar, cómo registrar un cobro, qué comprobante corresponde, si un ingreso afecta la categoría, o cómo ordenar el circuito de cobro.
+
+No rechaces una pregunta financiera solo porque no haya un cobro pendiente cargado en la app. Si el usuario pregunta "a quién facturo", "qué tipo de factura", "cómo declaro", "cómo registro" o "qué hago con este cobro", respondé con orientación y pedí los datos faltantes si hacen falta. Solo prepares una factura o busques cobros pendientes cuando el usuario dé una orden clara de emitir/preparar/facturar un cobro específico.
 
 Si el usuario pregunta algo fuera de ese alcance, redirigí amablemente:
-"Eso no es lo mío: estoy para ayudarte con tu monotributo, facturación y riesgo fiscal. ¿Querés que revise tu situación actual?"
+"Eso no es lo mío: estoy para ayudarte con tu monotributo, facturación, cobros y finanzas fiscales. ¿Querés que revise tu situación actual?"
 
 DATOS FIJOS DISPONIBLES
 Categorías monotributo 2026 (prestación de servicios):
@@ -171,6 +176,7 @@ LÍMITES LEGALES
 - Aclará naturalmente cuando corresponda que sos un asistente fiscal, no un contador matriculado.
 - Para exclusión del monotributo, intimaciones, fiscalizaciones, Convenio Multilateral, deuda judicial, embargos o interpretaciones complejas, recomendá validar con un contador humano matriculado.
 - No des garantías absolutas sobre interpretaciones fiscales complejas.
+- Podés orientar sobre organización financiera, circuito de cobro, documentación y criterios generales. No des recomendaciones de inversión personalizadas ni prometas resultados financieros.
 
 BÚSQUEDA WEB
 Tenés habilitada la herramienta web_search.
@@ -194,8 +200,10 @@ ESTILO DE RESPUESTA
 - No expliques tus herramientas ni tu proceso interno.`
 
 Deno.serve(async (request) => {
+  const corsHeaders = getCorsHeaders(request)
+
   if (!isAllowedOrigin(request)) {
-    return json({ error: "Forbidden" }, 403)
+    return json({ error: "Forbidden" }, 403, corsHeaders)
   }
 
   if (request.method === "OPTIONS") {
@@ -210,7 +218,7 @@ Deno.serve(async (request) => {
     const model = Deno.env.get("CLAUDE_MODEL") ?? "claude-sonnet-4-6"
 
     if (!apiKey) {
-      return json({ error: "Missing ANTHROPIC_API_KEY" }, 500)
+      return json({ error: "Missing ANTHROPIC_API_KEY" }, 500, corsHeaders)
     }
 
     const payload = (await request.json()) as ChatPayload
@@ -256,23 +264,24 @@ Deno.serve(async (request) => {
     if (!response.ok) {
       const details = await response.text()
 
-      return json({ error: details }, response.status)
+      return json({ error: details }, response.status, corsHeaders)
     }
 
     const data = (await response.json()) as ClaudeResponse
     const message = extractClaudeMessage(data)
 
-    return json({ message })
+    return json({ message }, 200, corsHeaders)
   } catch (error) {
     if (error instanceof UnauthorizedError) {
-      return json({ error: "Unauthorized" }, 401)
+      return json({ error: "Unauthorized" }, 401, corsHeaders)
     }
 
     return json(
       {
         error: error instanceof Error ? error.message : "Unknown error",
       },
-      500
+      500,
+      corsHeaders
     )
   }
 })
@@ -280,7 +289,29 @@ Deno.serve(async (request) => {
 function isAllowedOrigin(request: Request) {
   const origin = request.headers.get("Origin")
 
-  return !origin || origin === ALLOWED_ORIGIN
+  return !origin || allowedOrigins.has(origin)
+}
+
+function getCorsHeaders(request: Request) {
+  const origin = request.headers.get("Origin")
+  const allowedOrigin =
+    origin && allowedOrigins.has(origin)
+      ? origin
+      : (allowedOrigins.values().next().value ?? "http://localhost:5173")
+
+  return {
+    ...baseCorsHeaders,
+    "Access-Control-Allow-Origin": allowedOrigin,
+  }
+}
+
+function parseAllowedOrigins(value: string) {
+  const origins = value
+    .split(",")
+    .map((origin) => origin.trim().replace(/\/+$/, ""))
+    .filter(Boolean)
+
+  return new Set(origins.length > 0 ? origins : ["http://localhost:5173"])
 }
 
 async function authenticateRequest(request: Request): Promise<AuthContext> {
@@ -410,9 +441,7 @@ async function fetchJwks(): Promise<JwksResponse> {
     throw new Error("Missing SUPABASE_URL")
   }
 
-  const response = await fetch(
-    `${supabaseUrl}/auth/v1/.well-known/jwks.json`
-  )
+  const response = await fetch(`${supabaseUrl}/auth/v1/.well-known/jwks.json`)
 
   if (!response.ok) {
     throw new Error("Could not fetch Supabase JWKS")
@@ -509,7 +538,15 @@ function cleanMessage(message: string) {
     .trim()
 }
 
-function json(body: unknown, status = 200) {
+function json(
+  body: unknown,
+  status = 200,
+  corsHeaders = {
+    ...baseCorsHeaders,
+    "Access-Control-Allow-Origin":
+      allowedOrigins.values().next().value ?? "http://localhost:5173",
+  }
+) {
   return new Response(JSON.stringify(body), {
     status,
     headers: {

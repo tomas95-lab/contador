@@ -1,6 +1,3 @@
-import fs from "node:fs"
-import path from "node:path"
-
 import forge from "node-forge"
 import { XMLParser } from "fast-xml-parser"
 
@@ -38,25 +35,7 @@ function ticketCacheKey(
   credentials: UserArcaCredentials,
   service: ArcaServiceId
 ) {
-  return `${credentials.userId}:${credentials.cuit}:${service}`
-}
-
-function ticketCachePath(
-  credentials: UserArcaCredentials,
-  service: ArcaServiceId
-): string {
-  return path.join(
-    config.arca.cacheDir,
-    `ta-${config.arca.environment}-${credentials.userId}-${credentials.cuit}-${service}.json`
-  )
-}
-
-function ticketCacheFilePrefix(userId: string) {
-  return `ta-${config.arca.environment}-${userId}-`
-}
-
-function ticketCacheFileSuffix(service: ArcaServiceId) {
-  return `-${service}.json`
+  return `${config.arca.environment}:${credentials.userId}:${credentials.cuit}:${service}`
 }
 
 function isUsableTicket(ticket: AccessTicket): boolean {
@@ -74,18 +53,6 @@ function readCachedTicket(
     return memoryTicket
   }
 
-  try {
-    const raw = fs.readFileSync(ticketCachePath(credentials, service), "utf8")
-    const ticket = JSON.parse(raw) as AccessTicket
-
-    if (ticket.token && ticket.sign && isUsableTicket(ticket)) {
-      inMemoryTickets.set(cacheKey, ticket)
-      return ticket
-    }
-  } catch {
-    return undefined
-  }
-
   return undefined
 }
 
@@ -95,16 +62,6 @@ function writeCachedTicket(
   ticket: AccessTicket
 ): void {
   inMemoryTickets.set(ticketCacheKey(credentials, service), ticket)
-
-  try {
-    fs.mkdirSync(config.arca.cacheDir, { recursive: true })
-    fs.writeFileSync(
-      ticketCachePath(credentials, service),
-      JSON.stringify(ticket, null, 2)
-    )
-  } catch {
-    // The TA is still valid in memory; disk cache is a restart convenience.
-  }
 }
 
 function getSigningMaterial(credentials: UserArcaCredentials): SigningMaterial {
@@ -262,7 +219,7 @@ function asWsaaError(error: unknown, service: ArcaServiceId): ArcaError {
 }
 
 export function invalidateTicket(userId: string, service: ArcaServiceId) {
-  const memoryPrefix = `${userId}:`
+  const memoryPrefix = `${config.arca.environment}:${userId}:`
   const memorySuffix = `:${service}`
 
   for (const key of inMemoryTickets.keys()) {
@@ -275,19 +232,6 @@ export function invalidateTicket(userId: string, service: ArcaServiceId) {
     if (key.startsWith(memoryPrefix) && key.endsWith(memorySuffix)) {
       pendingTickets.delete(key)
     }
-  }
-
-  try {
-    const filePrefix = ticketCacheFilePrefix(userId)
-    const fileSuffix = ticketCacheFileSuffix(service)
-
-    for (const fileName of fs.readdirSync(config.arca.cacheDir)) {
-      if (fileName.startsWith(filePrefix) && fileName.endsWith(fileSuffix)) {
-        fs.rmSync(path.join(config.arca.cacheDir, fileName), { force: true })
-      }
-    }
-  } catch {
-    // Cache invalidation is best-effort; the next request will still refresh memory.
   }
 }
 

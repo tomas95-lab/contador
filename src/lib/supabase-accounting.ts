@@ -141,20 +141,23 @@ export async function createInvoice(invoice: Omit<GeneratedInvoice, "id">) {
 
   const { data, error } = await supabase!
     .from("invoices")
-    .insert({
-      payment_id: invoice.paymentId,
-      number: invoice.number,
-      invoice_type: invoice.invoiceType,
-      point_of_sale: invoice.pointOfSale,
-      issue_date: invoice.issueDate,
-      client: invoice.client,
-      description: invoice.description,
-      amount: invoice.amount,
-      cae: invoice.cae,
-      cae_expires_at: invoice.caeExpiresAt,
-      status: invoice.status,
-      user_id: userId,
-    })
+    .upsert(
+      {
+        payment_id: invoice.paymentId,
+        number: invoice.number,
+        invoice_type: invoice.invoiceType,
+        point_of_sale: invoice.pointOfSale,
+        issue_date: invoice.issueDate,
+        client: invoice.client,
+        description: invoice.description,
+        amount: invoice.amount,
+        cae: invoice.cae,
+        cae_expires_at: invoice.caeExpiresAt,
+        status: invoice.status,
+        user_id: userId,
+      },
+      { onConflict: "user_id,invoice_type,point_of_sale,number" }
+    )
     .select("*")
     .single()
 

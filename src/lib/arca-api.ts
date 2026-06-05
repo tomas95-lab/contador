@@ -82,6 +82,7 @@ export type ArcaInvoiceEmissionPayload = {
   amount: number
   description: string
   invoiceType: "C" | "E"
+  paymentId?: string
   currencyId?: "DOL" | "PES"
   exchangeRate?: number
   clientCuit?: string

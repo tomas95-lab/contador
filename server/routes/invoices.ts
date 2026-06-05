@@ -19,12 +19,24 @@ import {
   getUserArcaCredentials,
   type UserArcaCredentials,
 } from "../lib/arca-credentials.js"
+import {
+  logAuthorizedInvoiceSaveFailure,
+  logInvoiceEmissionAudit,
+  sanitizeAuditError,
+} from "../lib/audit-log.js"
+import { normalizeCuit } from "../lib/cuit.js"
+import {
+  buildPersistedInvoiceRow,
+  persistEmittedInvoice,
+} from "../lib/invoice-persistence.js"
 
 export const emitInvoiceSchema = z
   .object({
     amount: z.coerce.number().positive(),
     description: z.string().trim().min(1).max(4000),
     invoiceType: z.enum(["C", "E"]),
+    paymentId: z.string().uuid().optional(),
+    payment_id: z.string().uuid().optional(),
     clientCuit: z.string().trim().min(1).optional(),
     receiverIvaConditionId: z.coerce.number().int().positive().optional(),
     clientName: z.string().trim().min(1).max(200).optional(),
@@ -98,17 +110,80 @@ const historicalQuerySchema = z.object({
 
 export async function emitInvoice(req: Request, res: Response): Promise<void> {
   const payload = emitInvoiceSchema.parse(req.body)
+  let credentials: UserArcaCredentials | undefined
+  let result:
+    | Awaited<ReturnType<typeof emitFacturaC>>
+    | Awaited<ReturnType<typeof emitFacturaE>>
+    | undefined
 
   try {
-    const credentials = await getRequestArcaCredentials(req)
+    credentials = await getRequestArcaCredentials(req)
     const invoiceInput = buildEmissionPayload(payload)
-    const result =
+    result =
       payload.invoiceType === "C"
         ? await emitFacturaC(credentials, invoiceInput)
         : await emitFacturaE(credentials, invoiceInput)
+    const persistedInvoice = buildPersistedInvoiceRow({
+      clientName: payload.clientName ?? payload.foreignClientName,
+      paymentId: payload.paymentId ?? payload.payment_id,
+      receiverCuit: invoiceInput.clientCuit,
+      result,
+      userId: credentials.userId,
+    })
+
+    await persistEmittedInvoice(persistedInvoice)
+    logInvoiceEmissionAudit({
+      amount: result.invoice.amount,
+      invoiceType: result.invoice.invoiceType,
+      number: result.invoice.number,
+      pointOfSale: result.invoice.pointOfSale,
+      result: "authorized_saved",
+      userId: credentials.userId,
+    })
 
     res.status(201).json(result)
   } catch (error) {
+    if (result && credentials) {
+      logAuthorizedInvoiceSaveFailure({
+        cae: result.cae,
+        invoiceType: result.invoice.invoiceType,
+        number: result.invoice.number,
+        pointOfSale: result.invoice.pointOfSale,
+        userId: credentials.userId,
+      })
+      logInvoiceEmissionAudit({
+        amount: result.invoice.amount,
+        error: sanitizeAuditError(error),
+        invoiceType: result.invoice.invoiceType,
+        number: result.invoice.number,
+        pointOfSale: result.invoice.pointOfSale,
+        result: "authorized_local_save_failed",
+        userId: credentials.userId,
+      })
+      res.status(500).json({
+        error: `ARCA autorizó la factura ${result.invoice.invoiceType} ${result.invoice.pointOfSale}-${result.invoice.number} con CAE ${result.cae}, pero no se pudo guardar localmente. Contactá soporte antes de volver a emitirla.`,
+        details: {
+          cae: result.cae,
+          invoiceType: result.invoice.invoiceType,
+          number: result.invoice.number,
+          pointOfSale: result.invoice.pointOfSale,
+        },
+      })
+      return
+    }
+
+    logInvoiceEmissionAudit({
+      amount: payload.amount,
+      error: sanitizeAuditError(error),
+      invoiceType: payload.invoiceType,
+      pointOfSale:
+        payload.invoiceType === "E"
+          ? credentials?.wsfexPointOfSale
+          : credentials?.wsfePointOfSale,
+      result: "error",
+      userId: req.userId ?? "unknown",
+    })
+
     if (sendTranslatedArcaError(error, res)) {
       return
     }
@@ -302,32 +377,47 @@ function formatSummaryError(error: unknown) {
 }
 
 function buildEmissionPayload(payload: z.infer<typeof emitInvoiceSchema>) {
-  if (payload.invoiceType !== "E") {
-    return payload
+  const normalizedClientCuit = payload.clientCuit
+    ? normalizeCuit(payload.clientCuit)
+    : undefined
+  const normalizedPayload = {
+    ...payload,
+    clientCuit: normalizedClientCuit,
   }
 
-  const foreignClientName = payload.foreignClientName ?? payload.clientName
+  if (payload.invoiceType !== "E") {
+    return normalizedPayload
+  }
+
+  const foreignClientName =
+    normalizedPayload.foreignClientName ?? normalizedPayload.clientName
   const foreignClientCountryCode =
-    payload.foreignClientCountryCode ??
-    (payload.destinationCountryCode
-      ? String(payload.destinationCountryCode)
+    normalizedPayload.foreignClientCountryCode ??
+    (normalizedPayload.destinationCountryCode
+      ? String(normalizedPayload.destinationCountryCode)
       : undefined)
 
   return {
-    ...payload,
-    clientAddress: payload.foreignClientAddress ?? payload.clientAddress,
+    ...normalizedPayload,
+    clientAddress:
+      normalizedPayload.foreignClientAddress ?? normalizedPayload.clientAddress,
     clientName: foreignClientName,
-    clientTaxId: payload.foreignClientTaxId ?? payload.clientTaxId,
+    clientTaxId:
+      normalizedPayload.foreignClientTaxId ?? normalizedPayload.clientTaxId,
     destinationCountryCode: foreignClientCountryCode
       ? Number(foreignClientCountryCode)
-      : payload.destinationCountryCode,
+      : normalizedPayload.destinationCountryCode,
     foreignClientData:
       foreignClientName && foreignClientCountryCode
         ? {
-            address: payload.foreignClientAddress ?? payload.clientAddress,
+            address:
+              normalizedPayload.foreignClientAddress ??
+              normalizedPayload.clientAddress,
             countryCode: foreignClientCountryCode,
             name: foreignClientName,
-            taxId: payload.foreignClientTaxId ?? payload.clientTaxId,
+            taxId:
+              normalizedPayload.foreignClientTaxId ??
+              normalizedPayload.clientTaxId,
           }
         : undefined,
   }

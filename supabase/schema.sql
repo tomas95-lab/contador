@@ -95,6 +95,13 @@ create table if not exists public.invoices (
   created_at timestamptz not null default now()
 );
 
+create unique index if not exists invoices_user_invoice_number_idx
+on public.invoices (user_id, invoice_type, point_of_sale, number);
+
+create unique index if not exists invoices_user_invoice_cae_idx
+on public.invoices (user_id, invoice_type, point_of_sale, cae)
+where cae is not null;
+
 create table if not exists public.tax_settings (
   id text not null default 'default',
   user_id uuid not null references auth.users(id) on delete cascade,

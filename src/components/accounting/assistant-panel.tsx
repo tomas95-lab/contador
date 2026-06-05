@@ -14,6 +14,7 @@ import {
 import { ConfirmationDialog } from "@/components/confirmation-dialog"
 import { FiscalProfileCard } from "@/components/accounting/fiscal-profile-card"
 import { MessageMarkdown } from "@/components/accounting/message-markdown"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -39,6 +40,7 @@ import {
   requestAssistantReply,
   type RiskSnapshot,
 } from "@/lib/ai-assistant"
+import { professionalDisclaimer } from "@/lib/legal-copy"
 import {
   formatARS,
   formatPaymentDate,
@@ -454,6 +456,11 @@ export function AssistantPanel({
               Borrar conversación
             </Button>
           </div>
+          <Alert className="mt-4 border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100">
+            <AlertDescription className="text-xs text-amber-800 dark:text-amber-200">
+              {professionalDisclaimer}
+            </AlertDescription>
+          </Alert>
         </CardHeader>
         <CardContent
           ref={messagesScrollRef}
@@ -874,8 +881,18 @@ type InvoiceCandidateResult =
 
 function shouldPrepareInvoice(prompt: string) {
   const normalized = normalizeText(prompt)
+  const asksForGuidance =
+    /\b(a quien|quien|que tipo|tipo de factura|debo|deberia|tengo que|corresponde|conviene|como|a nombre de)\b/.test(
+      normalized
+    )
 
-  return /(factura|factur|emit|comprobante)/.test(normalized)
+  if (asksForGuidance) {
+    return false
+  }
+
+  return /\b(factura|facturar|facturame|emiti|emitir|emitime|prepara|preparar|preparame|genera|generar|generame|hace|hacer|haceme)\b/.test(
+    normalized
+  )
 }
 
 function inferInvoiceType(prompt: string, payment: IncomePayment): "C" | "E" {
@@ -984,11 +1001,11 @@ function shouldUseArcaContext(prompt: string) {
   const normalized = normalizeText(prompt)
 
   const mentionsFiscalData =
-    /arca|afip|factur|comprobante|cae|punto de venta|histor|monotributo|recategoriz|categoria|limite|ingreso/.test(
+    /arca|afip|factur|comprobante|cae|punto de venta|histor|monotributo|recategoriz|categoria|limite|ingreso|cobro|cliente|banco|transferencia|airtm|paypal|payoneer|wise|stripe|mercado pago|exterior|exportacion|scale ai/.test(
       normalized
     )
   const asksForRealData =
-    /cuanto|total|monto|importe|emitid|trae|consulta|histor|hasta ahora|este ano|este año|periodo|desde|limite|pasando|riesgo/.test(
+    /cuanto|total|monto|importe|emitid|trae|consulta|histor|hasta ahora|este ano|este año|periodo|desde|limite|pasando|riesgo|a quien|que tipo|debo|deberia|corresponde|registr|declar|facturo|facturar/.test(
       normalized
     )
 

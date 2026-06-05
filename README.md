@@ -136,7 +136,7 @@ supabase db push
 ```bash
 supabase secrets set ANTHROPIC_API_KEY=<ANTHROPIC_API_KEY>
 supabase secrets set CLAUDE_MODEL=claude-sonnet-4-6
-supabase secrets set ALLOWED_ORIGIN=http://localhost:5173
+supabase secrets set ALLOWED_ORIGIN=http://localhost:5173,http://127.0.0.1:5173
 supabase functions deploy claude-chat
 ```
 
@@ -162,47 +162,47 @@ Nunca commitear `.env.local`, certificados, private keys, service role keys ni t
 
 ### Frontend
 
-| Variable                         | Requerida | Placeholder                         | Descripcion                                                       |
-| -------------------------------- | --------- | ----------------------------------- | ----------------------------------------------------------------- |
-| `VITE_SUPABASE_URL`              | Si        | `https://<project-ref>.supabase.co` | URL publica del proyecto Supabase.                                |
-| `VITE_SUPABASE_ANON_KEY`         | Si        | `<SUPABASE_ANON_KEY>`               | Clave anon/public para inicializar Supabase JS en el navegador.   |
-| `VITE_ARCA_API_URL`              | Si        | `http://localhost:3001`             | URL del backend Express. En produccion apunta a Render.           |
-| `VITE_CONTA_CUIT`                | No        | `XX-XXXXXXXX-X`                     | CUIT visible de referencia en pantallas de onboarding.            |
-| `VITE_ARCA_ONBOARDING_URL`       | No        | `https://auth.afip.gob.ar/contribuyente_/login.xhtml` | URL que abre el boton "Abrir ARCA" durante el onboarding. |
-| `VITE_ARCA_WSFE_POINTS`          | No        | `4,5`                               | Puntos de venta WSFE a consultar desde el cliente. Default: `4`.  |
-| `VITE_ARCA_WSFEX_POINTS`         | No        | `3`                                 | Puntos de venta WSFEX a consultar desde el cliente. Default: `3`. |
+| Variable                   | Requerida | Placeholder                                           | Descripcion                                                       |
+| -------------------------- | --------- | ----------------------------------------------------- | ----------------------------------------------------------------- |
+| `VITE_SUPABASE_URL`        | Si        | `https://<project-ref>.supabase.co`                   | URL publica del proyecto Supabase.                                |
+| `VITE_SUPABASE_ANON_KEY`   | Si        | `<SUPABASE_ANON_KEY>`                                 | Clave anon/public para inicializar Supabase JS en el navegador.   |
+| `VITE_ARCA_API_URL`        | Si        | `http://localhost:3001`                               | URL del backend Express. En produccion apunta a Render.           |
+| `VITE_CONTA_CUIT`          | No        | `XX-XXXXXXXX-X`                                       | CUIT visible de referencia en pantallas de onboarding.            |
+| `VITE_ARCA_ONBOARDING_URL` | No        | `https://auth.afip.gob.ar/contribuyente_/login.xhtml` | URL que abre el boton "Abrir ARCA" durante el onboarding.         |
+| `VITE_ARCA_WSFE_POINTS`    | No        | `4,5`                                                 | Puntos de venta WSFE a consultar desde el cliente. Default: `4`.  |
+| `VITE_ARCA_WSFEX_POINTS`   | No        | `3`                                                   | Puntos de venta WSFEX a consultar desde el cliente. Default: `3`. |
 
 ### Backend Express
 
-| Variable                                 | Requerida  | Placeholder                                           | Descripcion                                                                      |
-| ---------------------------------------- | ---------- | ----------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `PORT`                                   | No         | `3001`                                                | Puerto local del backend. Render inyecta su propio puerto.                       |
-| `CORS_ORIGIN`                            | Si         | `http://localhost:5173,http://127.0.0.1:5173`         | Origins permitidos, separados por coma. No incluir slash final.                  |
-| `SUPABASE_URL`                           | Si         | `https://<project-ref>.supabase.co`                   | URL del proyecto Supabase usada por backend y JWKS.                              |
-| `SUPABASE_SERVICE_ROLE_KEY`              | Si         | `<SUPABASE_SERVICE_ROLE_KEY>`                         | Clave service role para operaciones server-side. Solo backend.                   |
-| `ARCA_ENCRYPTION_KEY`                    | Si         | `<LONG_RANDOM_SECRET>`                                | Master key usada por RPCs de Supabase para cifrar credenciales ARCA por usuario. |
-| `ARCA_ENV`                               | No         | `homologacion`                                        | Ambiente ARCA: `homologacion` o `production`.                                    |
-| `ARCA_CMS_DIGEST`                        | No         | `sha256`                                              | Digest usado al firmar CMS para WSAA.                                            |
-| `ARCA_CACHE_DIR`                         | No         | `.arca-cache`                                         | Directorio local para cachear tokens/autorizaciones temporales.                  |
-| `ARCA_REQUEST_TIMEOUT_MS`                | No         | `15000`                                               | Timeout de requests SOAP hacia ARCA.                                             |
-| `ARCA_HISTORICAL_PAGE_SIZE`              | No         | `100`                                                 | Tamano de pagina para consultas historicas.                                      |
-| `ARCA_HISTORICAL_MAX_INVOICES_PER_QUERY` | No         | `500`                                                 | Maximo de comprobantes a consultar por query historica.                          |
-| `ARCA_DEFAULT_CONDICION_IVA_RECEPTOR_ID` | No         | `5`                                                   | Condicion IVA default para Factura C. `5` representa consumidor final.           |
-| `ARCA_EXPORT_DST_CMP`                    | No         | `212`                                                 | Codigo de pais destino para Factura E si no se envia por request.                |
-| `ARCA_EXPORT_CLIENT_COUNTRY_CUIT`        | No         | `<COUNTRY_CUIT>`                                      | CUIT pais del cliente extranjero para defaults de exportacion.                   |
-| `ARCA_EXPORT_CLIENT_NAME`                | No         | `Cliente del exterior`                                | Nombre default para cliente extranjero.                                          |
-| `ARCA_EXPORT_CLIENT_ADDRESS`             | No         | `Exterior`                                            | Domicilio default para cliente extranjero.                                       |
-| `ARCA_EXPORT_CLIENT_TAX_ID`              | No         | `NO_DECLARADO`                                        | Tax ID default del cliente extranjero.                                           |
-| `ARCA_EXPORT_LANGUAGE`                   | No         | `1`                                                   | Idioma del comprobante exportacion segun parametros WSFEX.                       |
-| `ARCA_EXPORT_UNIT_OF_MEASURE`            | No         | `7`                                                   | Unidad de medida default para WSFEX.                                             |
-| `ARCA_WSAA_URL_HOMO`                     | No         | `https://wsaahomo.afip.gov.ar/ws/services/LoginCms`   | Override del endpoint WSAA homologacion.                                         |
-| `ARCA_WSFE_URL_HOMO`                     | No         | `https://wswhomo.afip.gov.ar/wsfev1/service.asmx`     | Override del endpoint WSFE homologacion.                                         |
-| `ARCA_WSFEX_URL_HOMO`                    | No         | `https://wswhomo.afip.gov.ar/wsfexv1/service.asmx`    | Override del endpoint WSFEX homologacion.                                        |
-| `ARCA_WSAA_URL_PROD`                     | No         | `https://wsaa.afip.gov.ar/ws/services/LoginCms`       | Override del endpoint WSAA produccion.                                           |
-| `ARCA_WSFE_URL_PROD`                     | No         | `https://servicios1.afip.gov.ar/wsfev1/service.asmx`  | Override del endpoint WSFE produccion.                                           |
-| `ARCA_WSFEX_URL_PROD`                    | No         | `https://servicios1.afip.gov.ar/wsfexv1/service.asmx` | Override del endpoint WSFEX produccion.                                          |
-| `NODE_ENV`                               | Produccion | `production`                                          | Activa comportamiento de produccion en runtime.                                  |
-| `NODE_VERSION`                           | Deploy     | `24`                                                  | Version de Node solicitada en Render.                                            |
+| Variable                                 | Requerida  | Placeholder                                           | Descripcion                                                                       |
+| ---------------------------------------- | ---------- | ----------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `PORT`                                   | No         | `3001`                                                | Puerto local del backend. Render inyecta su propio puerto.                        |
+| `CORS_ORIGIN`                            | Si         | `http://localhost:5173,http://127.0.0.1:5173`         | Origins permitidos, separados por coma. No incluir slash final.                   |
+| `SUPABASE_URL`                           | Si         | `https://<project-ref>.supabase.co`                   | URL del proyecto Supabase usada por backend y JWKS.                               |
+| `SUPABASE_SERVICE_ROLE_KEY`              | Si         | `<SUPABASE_SERVICE_ROLE_KEY>`                         | Clave service role para operaciones server-side. Solo backend.                    |
+| `ARCA_ENCRYPTION_KEY`                    | Si         | `<LONG_RANDOM_SECRET>`                                | Master key usada por RPCs de Supabase para cifrar credenciales ARCA por usuario.  |
+| `ARCA_ENV`                               | No         | `homologacion`                                        | Ambiente ARCA: `homologacion` o `production`.                                     |
+| `ARCA_CMS_DIGEST`                        | No         | `sha256`                                              | Digest usado al firmar CMS para WSAA.                                             |
+| `ARCA_CACHE_DIR`                         | No         | `.arca-cache`                                         | Legacy/local. WSAA cachea token/sign solo en memoria; no se escriben TA en disco. |
+| `ARCA_REQUEST_TIMEOUT_MS`                | No         | `15000`                                               | Timeout de requests SOAP hacia ARCA.                                              |
+| `ARCA_HISTORICAL_PAGE_SIZE`              | No         | `100`                                                 | Tamano de pagina para consultas historicas.                                       |
+| `ARCA_HISTORICAL_MAX_INVOICES_PER_QUERY` | No         | `500`                                                 | Maximo de comprobantes a consultar por query historica.                           |
+| `ARCA_DEFAULT_CONDICION_IVA_RECEPTOR_ID` | No         | `5`                                                   | Condicion IVA default para Factura C. `5` representa consumidor final.            |
+| `ARCA_EXPORT_DST_CMP`                    | No         | `212`                                                 | Codigo de pais destino para Factura E si no se envia por request.                 |
+| `ARCA_EXPORT_CLIENT_COUNTRY_CUIT`        | No         | `<COUNTRY_CUIT>`                                      | CUIT pais del cliente extranjero para defaults de exportacion.                    |
+| `ARCA_EXPORT_CLIENT_NAME`                | No         | `Cliente del exterior`                                | Nombre default para cliente extranjero.                                           |
+| `ARCA_EXPORT_CLIENT_ADDRESS`             | No         | `Exterior`                                            | Domicilio default para cliente extranjero.                                        |
+| `ARCA_EXPORT_CLIENT_TAX_ID`              | No         | `NO_DECLARADO`                                        | Tax ID default del cliente extranjero.                                            |
+| `ARCA_EXPORT_LANGUAGE`                   | No         | `1`                                                   | Idioma del comprobante exportacion segun parametros WSFEX.                        |
+| `ARCA_EXPORT_UNIT_OF_MEASURE`            | No         | `7`                                                   | Unidad de medida default para WSFEX.                                              |
+| `ARCA_WSAA_URL_HOMO`                     | No         | `https://wsaahomo.afip.gov.ar/ws/services/LoginCms`   | Override del endpoint WSAA homologacion.                                          |
+| `ARCA_WSFE_URL_HOMO`                     | No         | `https://wswhomo.afip.gov.ar/wsfev1/service.asmx`     | Override del endpoint WSFE homologacion.                                          |
+| `ARCA_WSFEX_URL_HOMO`                    | No         | `https://wswhomo.afip.gov.ar/wsfexv1/service.asmx`    | Override del endpoint WSFEX homologacion.                                         |
+| `ARCA_WSAA_URL_PROD`                     | No         | `https://wsaa.afip.gov.ar/ws/services/LoginCms`       | Override del endpoint WSAA produccion.                                            |
+| `ARCA_WSFE_URL_PROD`                     | No         | `https://servicios1.afip.gov.ar/wsfev1/service.asmx`  | Override del endpoint WSFE produccion.                                            |
+| `ARCA_WSFEX_URL_PROD`                    | No         | `https://servicios1.afip.gov.ar/wsfexv1/service.asmx` | Override del endpoint WSFEX produccion.                                           |
+| `NODE_ENV`                               | Produccion | `production`                                          | Activa comportamiento de produccion en runtime.                                   |
+| `NODE_VERSION`                           | Deploy     | `24`                                                  | Version de Node solicitada en Render.                                             |
 
 ### Credenciales ARCA Por Usuario
 
@@ -218,11 +218,11 @@ El flujo principal guarda las credenciales ARCA por usuario en Supabase, cifrada
 
 ### Supabase Edge Function `claude-chat`
 
-| Variable            | Requerida | Placeholder             | Descripcion                                                              |
-| ------------------- | --------- | ----------------------- | ------------------------------------------------------------------------ |
-| `ANTHROPIC_API_KEY` | Si        | `<ANTHROPIC_API_KEY>`   | API key de Anthropic. Se configura como secret de Supabase.              |
-| `CLAUDE_MODEL`      | No        | `claude-sonnet-4-6`     | Modelo usado por Conta.                                                  |
-| `ALLOWED_ORIGIN`    | Si        | `http://localhost:5173` | Origin permitido para invocar la funcion. En produccion apunta a Vercel. |
+| Variable            | Requerida | Placeholder                                   | Descripcion                                                                                   |
+| ------------------- | --------- | --------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `ANTHROPIC_API_KEY` | Si        | `<ANTHROPIC_API_KEY>`                         | API key de Anthropic. Se configura como secret de Supabase.                                   |
+| `CLAUDE_MODEL`      | No        | `claude-sonnet-4-6`                           | Modelo usado por Conta.                                                                       |
+| `ALLOWED_ORIGIN`    | Si        | `http://localhost:5173,http://127.0.0.1:5173` | Origins permitidos para invocar la funcion, separados por coma. En produccion incluir Vercel. |
 
 ### Render / npm Build
 
@@ -383,7 +383,7 @@ ARCA_WSFEX_PTO_VTA=<WSFEX_POINT_OF_SALE>
 ```bash
 supabase secrets set ANTHROPIC_API_KEY=<ANTHROPIC_API_KEY>
 supabase secrets set CLAUDE_MODEL=claude-sonnet-4-6
-supabase secrets set ALLOWED_ORIGIN=<VERCEL_ORIGIN>
+supabase secrets set ALLOWED_ORIGIN=<VERCEL_ORIGIN>,http://localhost:5173,http://127.0.0.1:5173
 supabase functions deploy claude-chat
 ```
 

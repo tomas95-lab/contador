@@ -38,6 +38,20 @@ export function SettingsView({
 }: SettingsViewProps) {
   const [showReconnectDialog, setShowReconnectDialog] = React.useState(false)
   const isArcaConfigured = arcaStatus === "configured"
+  const arcaStatusLabel =
+    arcaStatus === "loading"
+      ? "Verificando conexión"
+      : arcaStatus === "error"
+        ? "No verificado"
+        : "Sin credenciales activas"
+  const arcaBadgeLabel =
+    arcaStatus === "loading"
+      ? "Verificando"
+      : arcaStatus === "error"
+        ? "Revisar"
+        : isArcaConfigured
+          ? "Activo"
+          : "Pendiente"
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -96,12 +110,10 @@ export function SettingsView({
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <span className="font-medium tabular-nums">
-                  {isArcaConfigured
-                    ? arcaCuit || "Conectado"
-                    : "Sin credenciales activas"}
+                  {isArcaConfigured ? arcaCuit || "Conectado" : arcaStatusLabel}
                 </span>
                 <Badge variant={isArcaConfigured ? "secondary" : "outline"}>
-                  {isArcaConfigured ? "Activo" : "Pendiente"}
+                  {arcaBadgeLabel}
                 </Badge>
               </div>
               {isArcaConfigured && !arcaCuit ? (

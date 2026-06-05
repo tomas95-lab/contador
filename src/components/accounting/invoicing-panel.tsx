@@ -181,40 +181,6 @@ export function InvoicingPanel({
       setArcaSummary(createDemoArcaAnnualSummary(invoices, currentYear))
       setArcaError("")
       setIsSyncingArca(false)
-      return
-    }
-
-    let cancelled = false
-
-    async function syncArcaSummary() {
-      setIsSyncingArca(true)
-      setArcaError("")
-
-      try {
-        const summary = await fetchArcaAnnualSummary(currentYear)
-
-        if (!cancelled) {
-          setArcaSummary(summary)
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setArcaError(
-            error instanceof Error
-              ? error.message
-              : "No pudimos conectar con ARCA. Verificá tu conexión y volvé a intentarlo. Si el problema persiste, ARCA puede estar caído."
-          )
-        }
-      } finally {
-        if (!cancelled) {
-          setIsSyncingArca(false)
-        }
-      }
-    }
-
-    void syncArcaSummary()
-
-    return () => {
-      cancelled = true
     }
   }, [currentYear, invoices, isDemo])
 
@@ -768,14 +734,14 @@ export function InvoicingPanel({
             <div>
               <CardTitle>ARCA</CardTitle>
               <CardDescription>
-                Conexión fiscal que se sincroniza sola
+                Conexión fiscal para consultar cuando lo necesites
               </CardDescription>
             </div>
             <Badge variant="outline">
               {isSyncingArca
-                ? "Sincronizando"
+                ? "Consultando"
                 : arcaSummary
-                  ? "Se sincroniza solo"
+                  ? "Validado"
                   : "Preparado"}
             </Badge>
           </div>

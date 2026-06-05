@@ -9,8 +9,11 @@ import {
   saveUserArcaCredentials,
   type UserArcaCredentials,
 } from "../lib/arca-credentials.js"
+import { normalizeCuit } from "../lib/cuit.js"
 
-const TEMPORARY_PRIVATE_KEY_TTL_MS = 4 * 60 * 60 * 1000
+const TEMPORARY_PRIVATE_KEY_TTL_MINUTES = 45
+const TEMPORARY_PRIVATE_KEY_TTL_MS =
+  TEMPORARY_PRIVATE_KEY_TTL_MINUTES * 60 * 1000
 
 type PendingPrivateKey = {
   cuit: string
@@ -64,7 +67,10 @@ export async function generateArcaCsr(
   csr.sign(keyPair.privateKey, forge.md.sha256.create())
 
   if (!csr.verify()) {
-    throw new ArcaError("No se pudo generar un código de autorización válido.", 500)
+    throw new ArcaError(
+      "No se pudo generar un código de autorización válido.",
+      500
+    )
   }
 
   const privateKey = forge.pki.privateKeyToPem(keyPair.privateKey)
@@ -114,23 +120,13 @@ function getRequestUserId(req: Request) {
   return req.userId
 }
 
-function normalizeCuit(value: string) {
-  const cuit = value.replace(/\D/g, "")
-
-  if (cuit.length !== 11) {
-    throw new ArcaError("Ingresá un CUIT válido de 11 dígitos.", 400)
-  }
-
-  return cuit
-}
-
 function getPendingPrivateKey(userId: string) {
   const pending = pendingPrivateKeys.get(userId)
 
   if (!pending || pending.expiresAt <= Date.now()) {
     pendingPrivateKeys.delete(userId)
     throw new ArcaError(
-      "El código de autorización venció (son válidos por 4 horas). Volvé al paso 1, generá uno nuevo y repetí el trámite en ARCA.",
+      `El código de autorización venció (son válidos por ${TEMPORARY_PRIVATE_KEY_TTL_MINUTES} minutos). Volvé al paso 1, generá uno nuevo y repetí el trámite en ARCA.`,
       400
     )
   }
@@ -172,10 +168,7 @@ function assertCertificateMatchesPrivateKey(
       throw error
     }
 
-    throw new ArcaError(
-      "El archivo de certificado no parece ser válido.",
-      400
-    )
+    throw new ArcaError("El archivo de certificado no parece ser válido.", 400)
   }
 }
 
