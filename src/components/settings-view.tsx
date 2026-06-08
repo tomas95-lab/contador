@@ -7,6 +7,7 @@ import {
 } from "lucide-react"
 
 import { ConfirmationDialog } from "@/components/confirmation-dialog"
+import { PushNotificationsCard } from "@/components/push-notifications-card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -24,6 +25,7 @@ type SettingsViewProps = {
   arcaEnvironment: "homologacion" | "production" | "unknown"
   arcaCuit?: string | null
   arcaStatus: "configured" | "error" | "loading" | "missing"
+  canUsePushNotifications: boolean
   onOpenFiscalProfile: () => void
   onReconnectArca: () => void
   onSignOut: () => void
@@ -34,6 +36,7 @@ export function SettingsView({
   arcaEnvironment,
   arcaCuit,
   arcaStatus,
+  canUsePushNotifications,
   onOpenFiscalProfile,
   onReconnectArca,
   onSignOut,
@@ -194,6 +197,8 @@ export function SettingsView({
             </Button>
           </CardContent>
         </Card>
+
+        <PushNotificationsCard enabled={canUsePushNotifications} />
       </div>
 
       <Card className="rounded-lg shadow-none">

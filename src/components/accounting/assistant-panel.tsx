@@ -56,7 +56,6 @@ import {
   requestAssistantReply,
   type RiskSnapshot,
 } from "@/lib/ai-assistant"
-import { professionalDisclaimer } from "@/lib/legal-copy"
 import {
   formatARS,
   formatPaymentDate,
@@ -100,6 +99,7 @@ type AssistantPanelProps = {
     }
   ) => Promise<GeneratedInvoice | undefined>
   onSaveProfile: (profile: UserFiscalProfile) => Promise<void>
+  userName?: string
 }
 
 type PendingInvoiceDraft = {
@@ -139,6 +139,7 @@ export function AssistantPanel({
   onGenerateInvoice,
   onSaveProfile,
   profile,
+  userName,
 }: AssistantPanelProps) {
   const [content, setContent] = React.useState("")
   const [invoiceClientAddress, setInvoiceClientAddress] = React.useState("")
@@ -165,6 +166,7 @@ export function AssistantPanel({
   const [isPending, setIsPending] = React.useState(false)
   const messagesScrollRef = React.useRef<HTMLDivElement | null>(null)
   const messagesEndRef = React.useRef<HTMLDivElement | null>(null)
+  const composerRef = React.useRef<HTMLTextAreaElement | null>(null)
   const metrics = React.useMemo(
     () => getFinancialMetrics(payments, category),
     [category, payments]
@@ -224,10 +226,10 @@ export function AssistantPanel({
     window.sessionStorage.setItem(assistantIntroStorageKey, "true")
 
     void onAddMessage({
-      content: buildInitialAssistantMessage(riskSnapshot),
+      content: buildInitialAssistantMessage(riskSnapshot, userName),
       role: "assistant",
     })
-  }, [onAddMessage, riskSnapshot])
+  }, [onAddMessage, riskSnapshot, userName])
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -239,6 +241,9 @@ export function AssistantPanel({
     }
 
     setContent("")
+    if (composerRef.current) {
+      composerRef.current.style.height = "auto"
+    }
     setIsPending(true)
 
     try {
@@ -324,6 +329,7 @@ export function AssistantPanel({
         messages: [...messages, userMessage],
         profile,
         riskSnapshot,
+        userName,
       })
 
       await onAddMessage({
@@ -554,7 +560,7 @@ export function AssistantPanel({
           </div>
           <Alert className="mt-4 border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100">
             <AlertDescription className="text-xs text-amber-800 dark:text-amber-200">
-              {professionalDisclaimer}
+            Conta no reemplaza asesoramiento profesional en situaciones complejas. Te ayuda a facturar, monitorear tu categoría y entender tu situación fiscal diaria.
             </AlertDescription>
           </Alert>
         </CardHeader>
@@ -567,10 +573,15 @@ export function AssistantPanel({
               <div
                 key={message.id}
                 className={cn(
-                  "flex",
+                  "flex items-end gap-2",
                   message.role === "user" ? "justify-end" : "justify-start"
                 )}
               >
+                {message.role === "assistant" ? (
+                  <span className="mb-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
+                    <SparklesIcon className="size-3.5" />
+                  </span>
+                ) : null}
                 <div
                   className={cn(
                     "max-w-[78%] rounded-lg border px-3 py-2 text-sm shadow-xs",
@@ -597,11 +608,17 @@ export function AssistantPanel({
               </div>
             ))}
             {isPending && (
-              <div className="flex justify-start">
-                <div className="rounded-lg border bg-card px-3 py-2 text-sm text-muted-foreground">
-                  <span className="inline-flex items-center gap-2">
-                    {isQueryingArca ? <PlugZapIcon className="size-4" /> : null}
-                    {isQueryingArca ? "Consultando ARCA..." : "Pensando..."}
+              <div className="flex items-end justify-start gap-2">
+                <span className="mb-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
+                  <SparklesIcon className="size-3.5" />
+                </span>
+                <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm text-muted-foreground">
+                  {isQueryingArca ? <PlugZapIcon className="size-4" /> : null}
+                  <span>{isQueryingArca ? "Consultando ARCA..." : "Pensando"}</span>
+                  <span className="flex items-center gap-0.5">
+                    <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.3s]" />
+                    <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.15s]" />
+                    <span className="size-1.5 animate-bounce rounded-full bg-current" />
                   </span>
                 </div>
               </div>
@@ -683,10 +700,16 @@ export function AssistantPanel({
             </div>
             <form className="flex w-full gap-2" onSubmit={handleSubmit}>
               <Textarea
-                className="min-h-10 flex-1"
+                ref={composerRef}
+                className="max-h-40 min-h-10 flex-1 resize-none overflow-y-auto"
                 placeholder="Preguntar o pedir: facturá el cobro de Cuatro Cafe"
                 value={content}
-                onChange={(event) => setContent(event.target.value)}
+                onChange={(event) => {
+                  setContent(event.target.value)
+                  const textarea = event.currentTarget
+                  textarea.style.height = "auto"
+                  textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`
+                }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault()
@@ -806,7 +829,13 @@ export function AssistantPanel({
   )
 }
 
-function buildInitialAssistantMessage(riskSnapshot: RiskSnapshot) {
+function buildInitialAssistantMessage(
+  riskSnapshot: RiskSnapshot,
+  userName?: string,
+) {
+  const firstName = userName?.trim().split(/\s+/)[0]
+  const greeting = firstName ? `Hola, ${firstName}` : "Hola"
+
   if (
     riskSnapshot.riskLevel === "ALTO" ||
     riskSnapshot.riskLevel === "CRÍTICO"
@@ -816,14 +845,14 @@ function buildInitialAssistantMessage(riskSnapshot: RiskSnapshot) {
         ? `estás en riesgo ${riskSnapshot.riskLevel} y, si seguís igual, podrías cruzar el límite en ${riskSnapshot.daysUntilBreach} días`
         : `estás en riesgo ${riskSnapshot.riskLevel} y ya usaste ${riskSnapshot.categoryUsagePercent}% del límite de tu categoría`
 
-    return `⚠️ Antes de que me preguntes algo, tengo que avisarte: ${riskSummary}. ¿Querés que te explique qué hacer?`
+    return `⚠️ ${firstName ? `${firstName}, antes` : "Antes"} de que me preguntes algo, tengo que avisarte: ${riskSummary}. ¿Querés que te explique qué hacer?`
   }
 
   if (riskSnapshot.riskLevel === "MEDIO") {
-    return "Hola. Tu monotributo está en orden por ahora, aunque hay algunas cosas para seguir de cerca. ¿Querés un resumen de tu situación?"
+    return `${greeting}. Tu monotributo está en orden por ahora, aunque hay algunas cosas para seguir de cerca. ¿Querés un resumen de tu situación?`
   }
 
-  return "Hola. Todo en orden con tu monotributo. ¿En qué te puedo ayudar?"
+  return `${greeting}. Todo en orden con tu monotributo. ¿En qué te puedo ayudar?`
 }
 
 function getSuggestedQuestions(riskLevel: RiskSnapshot["riskLevel"]) {

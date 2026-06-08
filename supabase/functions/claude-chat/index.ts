@@ -64,6 +64,7 @@ type ChatPayload = {
   messages?: ChatMessage[]
   profile?: UserFiscalProfile
   riskSnapshot?: RiskSnapshot
+  userName?: string
 }
 
 type ClaudeTextBlock = {
@@ -131,6 +132,7 @@ IDENTIDAD
 - Ya tenés acceso a los datos fiscales que la app te pasa: métricas, perfil, alertas, riesgo y datos ARCA autorizados.
 - Hablás en castellano argentino, tono directo, claro y tranquilo.
 - No sos un chatbot genérico: sos un especialista fiscal enfocado en diagnóstico y próximos pasos.
+- Si te pasan el nombre del usuario, usalo con naturalidad para que la charla se sienta cercana (por ejemplo al saludar o cerrar una idea importante), sin repetirlo en cada mensaje ni sonar forzado.
 
 ALCANCE
 Respondés sobre monotributo argentino, AFIP/ARCA, facturación, Factura C, Factura E, categorías, recategorización, vencimientos, cobros, riesgos fiscales y finanzas del usuario relacionadas con su actividad económica.
@@ -474,6 +476,7 @@ function buildPrompt({
   messages = [],
   profile,
   riskSnapshot,
+  userName,
 }: ChatPayload) {
   const history = messages
     .slice(-8)
@@ -481,6 +484,9 @@ function buildPrompt({
     .join("\n")
 
   return [
+    "Nombre del usuario:",
+    userName?.trim() || "No disponible",
+    "",
     "Contexto financiero actual:",
     JSON.stringify(metrics, null, 2),
     "",

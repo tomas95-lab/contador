@@ -13,16 +13,29 @@ export async function signInWithEmail(email: string, password: string) {
   }
 }
 
-export async function signUpWithEmail(email: string, password: string) {
+export async function signUpWithEmail(
+  email: string,
+  password: string,
+  fullName: string,
+) {
   assertSupabase()
 
   const { data, error } = await supabase!.auth.signUp({
     email,
     password,
+    options: {
+      data: { full_name: fullName },
+    },
   })
 
   if (error) {
     throw error
+  }
+
+  if (data.user && data.user.identities && data.user.identities.length === 0) {
+    throw new Error(
+      "Ya existe una cuenta con ese email. Iniciá sesión en su lugar.",
+    )
   }
 
   return data

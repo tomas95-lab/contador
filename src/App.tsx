@@ -851,6 +851,7 @@ export default function App() {
             onSaveProfile={saveFiscalProfile}
             payments={payments}
             profile={fiscalProfile}
+            userName={isDemoActive ? demoUser.name : userFullName || undefined}
           />
         )
       case "facturacion":
@@ -884,6 +885,7 @@ export default function App() {
             arcaEnvironment={arcaEnvironment}
             arcaCuit={connectedArcaCuit}
             arcaStatus={isDemoActive ? "configured" : arcaCredentialsStatus}
+            canUsePushNotifications={shouldUseSupabase}
             onOpenFiscalProfile={() => setActiveSection("asistente")}
             onReconnectArca={handleReconnectArca}
             onSignOut={() => void handleSignOut()}
@@ -931,10 +933,14 @@ export default function App() {
   const userEmail = isDemoActive
     ? demoUser.email
     : (session?.user.email ?? "local@contable.app")
+  const userFullName =
+    typeof session?.user.user_metadata?.full_name === "string"
+      ? session.user.user_metadata.full_name.trim()
+      : ""
   const sidebarUser = isDemoActive
     ? demoUser
     : {
-        name: userEmail.split("@")[0] || "Usuario",
+        name: userFullName || userEmail.split("@")[0] || "Usuario",
         email: userEmail,
         avatar: "",
       }

@@ -31,6 +31,7 @@ export function LoginForm({
   const [error, setError] = React.useState("")
   const [message, setMessage] = React.useState("")
   const [mode, setMode] = React.useState<AuthMode>("login")
+  const [name, setName] = React.useState("")
   const [password, setPassword] = React.useState("")
   const [isPending, setIsPending] = React.useState(false)
 
@@ -50,7 +51,7 @@ export function LoginForm({
       if (mode === "login") {
         await signInWithEmail(email, password)
       } else {
-        const data = await signUpWithEmail(email, password)
+        const data = await signUpWithEmail(email, password, name.trim())
         if (!data.session) {
           setMessage("Cuenta creada. Revisá tu email para confirmar el acceso.")
           setMode("login")
@@ -84,6 +85,22 @@ export function LoginForm({
               : "Completá los datos para empezar."}
           </p>
         </div>
+
+        {mode === "signup" ? (
+          <Field>
+            <FieldLabel htmlFor="name">Nombre</FieldLabel>
+            <Input
+              autoComplete="name"
+              className="bg-background"
+              id="name"
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Tu nombre"
+              required
+              type="text"
+              value={name}
+            />
+          </Field>
+        ) : null}
 
         <Field>
           <FieldLabel htmlFor="email">Email</FieldLabel>

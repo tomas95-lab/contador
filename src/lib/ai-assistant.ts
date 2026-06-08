@@ -30,6 +30,7 @@ type AssistantPayload = {
   messages?: AssistantMessage[]
   profile?: UserFiscalProfile
   riskSnapshot?: RiskSnapshot
+  userName?: string
 }
 
 type AssistantResponse = {
@@ -43,6 +44,7 @@ export async function requestAssistantReply({
   messages = [],
   profile,
   riskSnapshot,
+  userName,
 }: AssistantPayload) {
   if (!supabase) {
     return "No pudimos conectar con Conta. Verificá la configuración de Supabase y volvé a intentarlo."
@@ -57,6 +59,7 @@ export async function requestAssistantReply({
           metrics,
           profile,
           riskSnapshot,
+          userName,
           messages: messages.map((message) => ({
             role: message.role,
             content: message.content,

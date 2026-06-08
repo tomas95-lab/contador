@@ -26,6 +26,13 @@ import {
   getArcaPointOfSales,
   getHistoricalArcaInvoices,
 } from "./routes/invoices.js"
+import {
+  getPushStatus,
+  getPushVapidPublicKey,
+  sendTestPush,
+  subscribeToPush,
+  unsubscribeFromPush,
+} from "./routes/push.js"
 
 declare module "express-serve-static-core" {
   interface Request {
@@ -93,6 +100,17 @@ const arcaQueryRateLimit = rateLimit({
   standardHeaders: "draft-8",
   windowMs: 60 * 1000,
 })
+const pushTestRateLimit = rateLimit({
+  keyGenerator: getAuthenticatedRateLimitKey,
+  legacyHeaders: false,
+  limit: 3,
+  message: {
+    error:
+      "Enviamos demasiadas pruebas de notificación. Esperá un minuto y volvé a intentar.",
+  },
+  standardHeaders: "draft-8",
+  windowMs: 60 * 1000,
+})
 
 app.use(globalRateLimit)
 app.use(
@@ -139,6 +157,11 @@ app.get(
   arcaQueryRateLimit,
   getArcaDestinationCountries
 )
+app.get("/api/push/status", getPushStatus)
+app.get("/api/push/public-key", getPushVapidPublicKey)
+app.post("/api/push/subscribe", subscribeToPush)
+app.post("/api/push/unsubscribe", unsubscribeFromPush)
+app.post("/api/push/test", pushTestRateLimit, sendTestPush)
 
 async function authenticateJwt(
   req: Request,

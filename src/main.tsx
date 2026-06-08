@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 
 import "./index.css"
 import { ErrorBoundary } from "@/components/error-boundary.tsx"
+import { InstallAppButton } from "@/components/install-app-button.tsx"
 import { ThemeProvider } from "@/components/theme-provider.tsx"
 import { TooltipProvider } from "@/components/ui/tooltip.tsx"
 
@@ -40,6 +41,7 @@ createRoot(document.getElementById("root")!).render(
             />
             <Route path="*" element={<Navigate replace to="/" />} />
           </Routes>
+          <InstallAppButton />
         </BrowserRouter>
       </TooltipProvider>
     </ThemeProvider>
