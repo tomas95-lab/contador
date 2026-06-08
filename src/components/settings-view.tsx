@@ -9,6 +9,7 @@ import {
 import { ConfirmationDialog } from "@/components/confirmation-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Card,
   CardContent,
@@ -20,6 +21,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
 type SettingsViewProps = {
+  arcaEnvironment: "homologacion" | "production" | "unknown"
   arcaCuit?: string | null
   arcaStatus: "configured" | "error" | "loading" | "missing"
   onOpenFiscalProfile: () => void
@@ -29,6 +31,7 @@ type SettingsViewProps = {
 }
 
 export function SettingsView({
+  arcaEnvironment,
   arcaCuit,
   arcaStatus,
   onOpenFiscalProfile,
@@ -37,6 +40,15 @@ export function SettingsView({
   userEmail,
 }: SettingsViewProps) {
   const [showReconnectDialog, setShowReconnectDialog] = React.useState(false)
+  const showEnvironmentCheck =
+    userEmail.trim().toLowerCase() === "truiz050904@gmail.com"
+  const isHomologacion = arcaEnvironment === "homologacion"
+  const arcaEnvironmentLabel =
+    arcaEnvironment === "production"
+      ? "Producción"
+      : arcaEnvironment === "homologacion"
+        ? "Homologación"
+        : "Ambiente no verificado"
   const isArcaConfigured = arcaStatus === "configured"
   const arcaStatusLabel =
     arcaStatus === "loading"
@@ -104,6 +116,34 @@ export function SettingsView({
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
+            {showEnvironmentCheck ? (
+              <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sky-950 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-100">
+                <div className="flex items-start gap-3">
+                  <Checkbox
+                    checked={isHomologacion}
+                    disabled
+                    id="arca-environment-split"
+                  />
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Label
+                        className="text-sm font-medium"
+                        htmlFor="arca-environment-split"
+                      >
+                        Credenciales separadas por ambiente
+                      </Label>
+                      <Badge variant="secondary">{arcaEnvironmentLabel}</Badge>
+                    </div>
+                    <p className="text-xs leading-5 text-sky-900/75 dark:text-sky-100/75">
+                      {isHomologacion
+                        ? "Activo para pruebas: al reconectar se guardan credenciales de homologación y se conserva producción."
+                        : "En producción, al reconectar se actualizan solo las credenciales reales de producción."}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
             <div className="rounded-lg border p-3">
               <div className="text-sm text-muted-foreground">
                 CUIT conectado
@@ -153,7 +193,11 @@ export function SettingsView({
 
       <ConfirmationDialog
         actionLabel="Reconectar"
-        description="¿Estás seguro que querés reconectar ARCA? Vas a volver al onboarding y las nuevas credenciales reemplazarán la conexión actual cuando completes el proceso."
+        description={
+          showEnvironmentCheck && isHomologacion
+            ? "¿Querés reconectar ARCA en homologación? Vas a volver al onboarding y las nuevas credenciales se guardarán como credenciales de prueba, sin reemplazar las de producción."
+            : "¿Estás seguro que querés reconectar ARCA? Vas a volver al onboarding y las nuevas credenciales reemplazarán la conexión actual cuando completes el proceso."
+        }
         onConfirm={() => {
           setShowReconnectDialog(false)
           onReconnectArca()

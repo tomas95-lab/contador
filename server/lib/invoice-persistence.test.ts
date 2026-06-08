@@ -12,6 +12,9 @@ describe("buildPersistedInvoiceRow", () => {
       result: "A",
       invoice: {
         amount: 12500.5,
+        amountArs: 12500.5,
+        currencyId: "PES",
+        currencyRate: 1,
         date: "2026-06-05",
         description: "Servicio mensual",
         invoiceType: "C",
@@ -32,10 +35,13 @@ describe("buildPersistedInvoiceRow", () => {
       })
     ).toEqual({
       amount: 12500.5,
+      amount_ars: 12500.5,
       cae: "12345678901234",
       cae_expires_at: "2026-06-15",
       client: "Cliente local",
+      currency_id: "PES",
       description: "Servicio mensual",
+      exchange_rate: 1,
       invoice_type: "Factura C",
       issue_date: "2026-06-05",
       number: "0004-00000037",
@@ -53,6 +59,9 @@ describe("buildPersistedInvoiceRow", () => {
       result: "A",
       invoice: {
         amount: 300,
+        amountArs: 360000,
+        currencyId: "DOL",
+        currencyRate: 1200,
         date: "2026-06-05",
         description: "Export service",
         invoiceType: "E",
@@ -71,6 +80,10 @@ describe("buildPersistedInvoiceRow", () => {
     ).toMatchObject({
       cae: "98765432109876",
       client: "Cliente del exterior",
+      currency_id: "DOL",
+      exchange_rate: 1200,
+      amount: 300,
+      amount_ars: 360000,
       invoice_type: "Factura E",
       number: "0006-00000008",
       payment_id: null,

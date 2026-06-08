@@ -24,7 +24,6 @@ import { isSupabaseConfigured, supabase } from "@/lib/supabase"
 import {
   createAssistantMessage,
   clearAssistantMessages,
-  createInvoice,
   createPayment,
   deletePayment,
   emptyFiscalProfile,
@@ -35,7 +34,6 @@ import {
   fetchTaxCategories,
   fetchTaxCategory,
   fetchTaxPayments,
-  markPaymentAsInvoiced,
   markTaxPaymentAsPaid,
   unmarkTaxPaymentAsPaid,
   updatePayment,
@@ -57,8 +55,10 @@ import type {
 type DataStatus = "loading" | "connected" | "local" | "demo" | "error"
 type AuthStatus = "loading" | "authenticated" | "anonymous"
 type ArcaCredentialsStatus = "loading" | "configured" | "missing" | "error"
+type ArcaEnvironment = "homologacion" | "production" | "unknown"
 type InvoiceEmissionOptions = {
   invoiceType?: InvoiceKind
+  amount?: number
   currencyId?: "DOL" | "PES"
   exchangeRate?: number
   clientCuit?: string
@@ -201,6 +201,8 @@ export default function App() {
   )
   const [arcaCredentialsStatus, setArcaCredentialsStatus] =
     React.useState<ArcaCredentialsStatus>("loading")
+  const [arcaEnvironment, setArcaEnvironment] =
+    React.useState<ArcaEnvironment>("unknown")
   const arcaCredentialsStatusRef = React.useRef<ArcaCredentialsStatus | null>(
     null
   )
@@ -320,6 +322,7 @@ export default function App() {
           arcaCredentialsUserKeyRef.current = userKey
           arcaCredentialsStatusRef.current = nextStatus
           setArcaCredentialsStatus(nextStatus)
+          setArcaEnvironment(status.arcaEnvironment)
         }
       } catch (error) {
         console.error(error)
@@ -328,6 +331,7 @@ export default function App() {
           arcaCredentialsUserKeyRef.current = userKey
           arcaCredentialsStatusRef.current = "error"
           setArcaCredentialsStatus("error")
+          setArcaEnvironment("unknown")
         }
       }
     }
@@ -711,8 +715,9 @@ export default function App() {
       }
 
       try {
+        const invoiceAmount = options.amount ?? payment.amount
         const arcaInvoice = await emitArcaInvoice({
-          amount: payment.amount,
+          amount: invoiceAmount,
           paymentId: payment.id,
           currencyId: options.currencyId,
           exchangeRate: options.exchangeRate,
@@ -741,9 +746,15 @@ export default function App() {
             arcaInvoice.invoice.invoiceType === "E" ? "Factura E" : "Factura C",
           pointOfSale: arcaInvoice.invoice.pointOfSale,
           issueDate: arcaInvoice.invoice.date ?? getTodayInputValue(),
-          client: payment.client,
+          client:
+            invoiceKind === "E"
+              ? options.foreignClientName ?? options.clientName ?? payment.client
+              : options.clientName ?? payment.client,
           description: arcaInvoice.invoice.description,
           amount: arcaInvoice.invoice.amount,
+          currencyId: arcaInvoice.invoice.currencyId,
+          exchangeRate: arcaInvoice.invoice.currencyRate,
+          amountArs: arcaInvoice.invoice.amountArs,
           cae: arcaInvoice.cae,
           caeExpiresAt: arcaInvoice.caeExpiresAt,
           status: "issued",
@@ -756,15 +767,13 @@ export default function App() {
 
       if (shouldUseSupabase) {
         try {
-          const savedInvoice = await createInvoice(issuedInvoice)
-          const updatedPayment = await markPaymentAsInvoiced(payment.id)
+          const [remotePayments, remoteInvoices] = await Promise.all([
+            fetchPayments(),
+            fetchInvoices(),
+          ])
 
-          setInvoices((current) => [savedInvoice, ...current])
-          setPayments((current) =>
-            current.map((item) =>
-              item.id === updatedPayment.id ? updatedPayment : item
-            )
-          )
+          setInvoices(remoteInvoices)
+          setPayments(remotePayments)
           setDataStatus("connected")
           return
         } catch (error) {
@@ -772,8 +781,8 @@ export default function App() {
           setDataStatus("error")
           throw new Error(
             error instanceof Error
-              ? `ARCA emitió la factura ${issuedInvoice.number} con número de validación ARCA ${issuedInvoice.cae}, pero no se pudo guardar en la app: ${error.message}`
-              : `ARCA emitió la factura ${issuedInvoice.number} con número de validación ARCA ${issuedInvoice.cae}, pero no se pudo guardar en la app.`
+              ? `ARCA emitió y guardó la factura ${issuedInvoice.number} con número de validación ARCA ${issuedInvoice.cae}, pero no pude refrescar la pantalla: ${error.message}`
+              : `ARCA emitió y guardó la factura ${issuedInvoice.number} con número de validación ARCA ${issuedInvoice.cae}, pero no pude refrescar la pantalla.`
           )
         }
       }
@@ -825,6 +834,7 @@ export default function App() {
         return (
           <AssistantPanel
             category={category}
+            arcaEnvironment={arcaEnvironment}
             isDemo={isDemoActive}
             isIssuingInvoice={isIssuingInvoice}
             messages={assistantMessages}
@@ -840,6 +850,7 @@ export default function App() {
         return (
           <InvoicingPanel
             category={category}
+            arcaEnvironment={arcaEnvironment}
             isDemo={isDemoActive}
             invoices={invoices}
             isIssuingInvoice={isIssuingInvoice}
@@ -863,6 +874,7 @@ export default function App() {
       case "configuracion":
         return (
           <SettingsView
+            arcaEnvironment={arcaEnvironment}
             arcaCuit={connectedArcaCuit}
             arcaStatus={isDemoActive ? "configured" : arcaCredentialsStatus}
             onOpenFiscalProfile={() => setActiveSection("asistente")}
@@ -924,6 +936,7 @@ export default function App() {
     return (
       <React.Suspense fallback={<LazySectionFallback />}>
         <ArcaOnboarding
+          arcaEnvironment={arcaEnvironment}
           onComplete={(cuit) => {
             setStoredArcaCuit(cuit)
             setConnectedArcaCuit(cuit)

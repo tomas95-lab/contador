@@ -14,6 +14,7 @@ import {
 import {
   formatARS,
   formatFiscalPeriodRange,
+  formatInvoiceAmount,
   formatMonthName,
   getFinancialMetrics,
   getMonthKey,
@@ -186,7 +187,7 @@ function buildMonthlyReportHtml({
         <td>${escapeHtml(invoice.issueDate)}</td>
         <td>${escapeHtml(invoice.number)}</td>
         <td>${escapeHtml(invoice.client)}</td>
-        <td class="right">${formatARS(invoice.amount)}</td>
+        <td class="right">${formatInvoiceAmount(invoice)}</td>
       </tr>`
     )
     .join("")

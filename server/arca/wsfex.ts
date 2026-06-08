@@ -1,7 +1,12 @@
 import { config } from "../config.js"
 import type { UserArcaCredentials } from "../lib/arca-credentials.js"
 import { fromArcaDate, roundMoney, toArcaDate } from "./date.js"
-import { ArcaError, isArcaAuthenticationError, nonZeroCode } from "./errors.js"
+import {
+  ArcaError,
+  asArray,
+  isArcaAuthenticationError,
+  nonZeroCode,
+} from "./errors.js"
 import { record } from "./objects.js"
 import { getSoapClient } from "./soap.js"
 import { withArcaRequestTimeout } from "./timeout.js"
@@ -42,6 +47,9 @@ export interface EmittedWsfexInvoice {
     number: number
     date: string | null
     amount: number
+    currencyId: string
+    currencyRate: number
+    amountArs: number
     description: string
   }
   arca: unknown
@@ -89,11 +97,17 @@ export type WsfexHistoricalQueryOptions = {
   offset?: number
 }
 
+export type WsfexDestinationCountry = {
+  code: string
+  name: string
+}
+
 interface WsfexSoapClient {
   FEXGetLast_IDAsync(args: unknown): Promise<[unknown]>
   FEXGetLast_CMPAsync(args: unknown): Promise<[unknown]>
   FEXAuthorizeAsync(args: unknown): Promise<[unknown]>
   FEXGetCMPAsync(args: unknown): Promise<[unknown]>
+  FEXGetPARAM_DST_paisAsync(args: unknown): Promise<[unknown]>
 }
 
 interface ArcaAuth {
@@ -119,7 +133,11 @@ function ensureNoFexError(result: unknown, operation: string): void {
   const errorRecord = record(error)
 
   if (error && nonZeroCode(errorRecord.ErrCode)) {
-    throw new ArcaError("ARCA rechazó la operación.", 502, errorRecord)
+    throw new ArcaError(
+      `ARCA rechazó la operación ${operation}.`,
+      502,
+      errorRecord
+    )
   }
 }
 
@@ -214,6 +232,39 @@ export async function getFacturaEAnnualSummary(
   return withWsfexTicketRetry(credentials, () =>
     getFacturaEAnnualSummaryOnce(credentials, year)
   )
+}
+
+export async function getWsfexDestinationCountries(
+  credentials: UserArcaCredentials
+): Promise<WsfexDestinationCountry[]> {
+  return withWsfexTicketRetry(credentials, async () => {
+    const ticket = await getAccessTicket(credentials, "wsfex")
+    const client = (await getSoapClient(
+      config.arca.endpoints.wsfexUrl
+    )) as unknown as WsfexSoapClient
+    const [response] = await withArcaRequestTimeout(
+      "FEXGetPARAM_DST_pais",
+      client.FEXGetPARAM_DST_paisAsync({
+        Auth: auth(credentials, ticket.token, ticket.sign),
+      })
+    )
+    const result = record(response).FEXGetPARAM_DST_paisResult
+
+    ensureNoFexError(result, "FEXGetPARAM_DST_pais")
+
+    return asArray(
+      record(record(result).FEXResultGet).ClsFEXResponse_DST_pais
+    )
+      .map((country) => {
+        const countryRecord = record(country)
+
+        return {
+          code: String(countryRecord.DST_Codigo ?? "").trim(),
+          name: String(countryRecord.DST_Ds ?? "").trim(),
+        }
+      })
+      .filter((country) => country.code && country.name)
+  })
 }
 
 async function getFacturaEAnnualSummaryOnce(
@@ -484,6 +535,9 @@ async function emitFacturaEOnce(
       number: Number(authResult.Cbte_nro ?? invoiceNumber),
       date: fromArcaDate(String(authResult.Fch_cbte ?? today)),
       amount,
+      currencyId,
+      currencyRate: exchangeRate,
+      amountArs: roundMoney(amount * exchangeRate),
       description: input.description,
     },
     arca: {

@@ -62,6 +62,7 @@ import {
 import { useIsMobile } from "@/hooks/use-mobile"
 
 type ArcaOnboardingProps = {
+  arcaEnvironment: "homologacion" | "production" | "unknown"
   onComplete: (cuit: string) => void
   onDemoClick: () => void
   onSignOut: () => void
@@ -79,14 +80,19 @@ const stepperSteps: {
   { number: 3, label: "Guardar conexión", where: "Acá en la app" },
 ]
 
-const arcaLoginUrl =
+const arcaProductionLoginUrl =
+  (import.meta.env.VITE_ARCA_ONBOARDING_URL_PROD as string | undefined) ??
   (import.meta.env.VITE_ARCA_ONBOARDING_URL as string | undefined) ??
   "https://auth.afip.gob.ar/contribuyente_/login.xhtml"
+const arcaHomologacionLoginUrl =
+  (import.meta.env.VITE_ARCA_ONBOARDING_URL_HOMO as string | undefined) ??
+  "https://www.arca.gob.ar/"
 const onboardingTutorialEmbedUrl =
   "https://www.youtube-nocookie.com/embed/uEnpdpVFYlQ?rel=0&modestbranding=1"
 const onboardingTutorialWatchUrl = "https://youtu.be/uEnpdpVFYlQ"
 
 export function ArcaOnboarding({
+  arcaEnvironment,
   onComplete,
   onDemoClick,
   onSignOut,
@@ -111,6 +117,81 @@ export function ArcaOnboarding({
     typeof window !== "undefined" && window.innerWidth < 768
   const normalizedCuit = cuit.replace(/\D/g, "")
   const progressValue = ((currentStep - 1) / (stepperSteps.length - 1)) * 100
+  const isHomologacionEnvironment = arcaEnvironment === "homologacion"
+  const arcaLoginUrl = isHomologacionEnvironment
+    ? arcaHomologacionLoginUrl
+    : arcaProductionLoginUrl
+  const arcaEnvironmentBadge =
+    arcaEnvironment === "homologacion"
+      ? "Homologación: prueba"
+      : arcaEnvironment === "production"
+        ? "Producción: factura real"
+        : "Ambiente no verificado"
+  const arcaOpenButtonLabel = isHomologacionEnvironment
+    ? "Abrir portal ARCA normal"
+    : "Abrir ARCA"
+  const certificateTaskSource = isHomologacionEnvironment
+    ? "WSASS - certificados de testing"
+    : "Administración de Certificados Digitales"
+  const serviceTaskSource = isHomologacionEnvironment
+    ? "WSASS - autorizaciones de testing"
+    : "Administrador de Relaciones"
+  const pointOfSaleTaskSource = isHomologacionEnvironment
+    ? "Puntos de venta de homologación"
+    : "Administración de puntos de venta y domicilios"
+  const certificateInstructions = isHomologacionEnvironment
+    ? [
+        "Entrá a arca.gob.ar con clave fiscal de persona física, no de empresa/persona jurídica.",
+        "Si todavía no ves WSASS en Mis Servicios: Administrador de Relaciones → Adherir servicio → ARCA → Servicios interactivos → WSASS - Autogestión Certificados Homologación.",
+        "Cerrá sesión y volvé a entrar. En Mis Servicios abrí WSASS - Autogestión Certificados Homologación.",
+        "En WSASS, entrá a Nuevo Certificado o Agregar Certificado a Alias.",
+        "En Alias escribí cualquier nombre, por ejemplo: conta-test.",
+        "En Seleccionar Archivo elegí el archivo `.csr` de código que descargaste desde Conta.",
+        "Confirmá la carga y descargá el certificado emitido para testing/homologación.",
+        "Guardá ese archivo, lo vas a necesitar en el paso 3.",
+      ]
+    : [
+        "Entrá a arca.gob.ar e iniciá sesión con tu CUIT y clave fiscal.",
+        "Buscá y abrí Administración de Certificados Digitales.",
+        "Hacé click en Agregar alias.",
+        "En Alias escribí cualquier nombre, por ejemplo: conta-app.",
+        "En Seleccionar Archivo elegí el archivo `.csr` de código que descargaste.",
+        "Hacé click en Agregar Alias.",
+        "En la lista de alias buscá tu alias y hacé click en Ver.",
+        "Hacé click en Descargar. Guardá ese archivo, lo vas a necesitar en el paso 3.",
+      ]
+  const serviceInstructions = isHomologacionEnvironment
+    ? [
+        "En WSASS, entrá a Crear autorización a servicio.",
+        "Seleccioná el alias/certificado de testing que creaste en el paso anterior.",
+        "Autorizá el servicio wsfe para Factura C.",
+        "Si también vas a emitir Factura E, autorizá el servicio wsfex con el mismo alias/certificado.",
+        "Revisá que las autorizaciones queden activas dentro de WSASS antes de volver a Conta.",
+      ]
+    : [
+        "Dentro de ARCA, buscá y abrí Administrador de Relaciones. Este paso autoriza Web Services, no crea puntos de venta.",
+        "Hacé click en Incorporar nueva Relación.",
+        "En la pantalla de Incorporar nueva Relación, revisá que Autorizante (Dador) y Representado sean tu CUIT.",
+        "Para Facturación Electrónica común (WSFE), en Servicio presioná Buscar.",
+        "Seleccioná ARCA → WebServices → Facturación Electrónica.",
+        "Luego, en Representante, presioná Buscar.",
+        "Seleccioná el alias/certificado que creaste en el paso anterior, por ejemplo conta-app.",
+        "Confirmá la relación.",
+        "Si también vas a emitir Factura E: Administrador de Relaciones → Incorporar nueva Relación → Buscar Servicio → ARCA → WebServices → Factura electronica de exportacion.",
+        "Para Factura E, después buscá el Representante, seleccioná el mismo alias/certificado y confirmá la relación.",
+      ]
+  const pointOfSaleInstructions = isHomologacionEnvironment
+    ? [
+        "Para pruebas, no crees certificados ni autorizaciones desde el ARCA real de producción.",
+        "Usá el punto de venta de homologación que quieras probar para WSFE. Si no tenés uno definido, empezá con 1.",
+        "Para Factura E de prueba, usá el punto de venta de homologación para WSFEX. Si no tenés uno definido, empezá con 1.",
+        "Si ARCA rechaza el punto de venta, consultá los puntos disponibles desde la pantalla de facturación o probá otro número de homologación.",
+      ]
+    : [
+        "Dentro de ARCA, buscá Administración de puntos de venta y domicilios. Este paso es aparte de Administrador de Relaciones.",
+        "Creá un punto de venta de tipo Factura Electrónica - Monotributo - Web Services. Anotá el número que te asigna.",
+        "Si también emitís facturas al exterior: creá otro de tipo Comprobantes de Exportación - Web Services. Anotá ese número también.",
+      ]
   const canSave =
     Boolean(certificate) &&
     Boolean(wsfePointOfSale) &&
@@ -193,6 +274,9 @@ export function ArcaOnboarding({
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <Badge className="rounded-[99px] border border-[#B5D4F4] bg-[#E6F1FB] px-3 py-1 text-[#0C447C] hover:bg-[#E6F1FB] dark:border-[#B5D4F4]/40 dark:bg-[#185FA5]/25 dark:text-[#E6F1FB]">
                   ARCA / AFIP
+                </Badge>
+                <Badge className="rounded-[99px] border border-[#8CD7C2] bg-[#E3F8F2] px-3 py-1 text-[#0F6B55] hover:bg-[#E3F8F2] dark:border-[#8CD7C2]/40 dark:bg-[#0F4C3F]/35 dark:text-[#D8FFF4]">
+                  {arcaEnvironmentBadge}
                 </Badge>
                 <Badge className="rounded-[99px] border border-[#C0DD97] bg-[#EAF3DE] px-3 py-1 text-[#3B6D11] hover:bg-[#EAF3DE] dark:border-[#C0DD97]/40 dark:bg-[#27500A]/35 dark:text-[#EAF3DE]">
                   Sin compartir clave fiscal
@@ -329,9 +413,17 @@ export function ArcaOnboarding({
             {/* ── PASO 2: Todo en ARCA ── */}
             <StepCard
               currentStep={currentStep}
-              description="Abrí ARCA en otra pestaña y completá estas 3 cosas. Dejá esta pantalla abierta, vas a volver a ella."
+              description={
+                isHomologacionEnvironment
+                  ? "Abrí ARCA en otra pestaña, entrá a WSASS y completá estas 3 cosas. Dejá esta pantalla abierta, vas a volver a ella."
+                  : "Abrí ARCA en otra pestaña y completá estas 3 cosas. Dejá esta pantalla abierta, vas a volver a ella."
+              }
               step={2}
-              title="Hacé el trámite en ARCA"
+              title={
+                isHomologacionEnvironment
+                  ? "Hacé el trámite en homologación"
+                  : "Hacé el trámite en ARCA"
+              }
             >
               <div className="space-y-5">
                 {/* Código */}
@@ -365,26 +457,41 @@ export function ArcaOnboarding({
                     >
                       <a href={arcaLoginUrl} rel="noreferrer" target="_blank">
                         <ExternalLinkIcon />
-                        Abrir ARCA
+                        {arcaOpenButtonLabel}
                       </a>
                     </Button>
                   </div>
                 </div>
 
+                {isHomologacionEnvironment ? (
+                  <Alert className="border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-900/60 dark:bg-sky-950/40 dark:text-sky-100 [&>svg]:text-sky-700 dark:[&>svg]:text-sky-300">
+                    <InfoIcon className="size-4" />
+                  <AlertDescription>
+                      Estás en homologación. Entrás por el portal normal de
+                      ARCA, pero el certificado de prueba se genera en WSASS.
+                      Es esperable que el botón abra la landing normal de ARCA.
+                      No uses Administración de Certificados Digitales para
+                      este certificado.
+                  </AlertDescription>
+                </Alert>
+                ) : null}
+
                 <Alert className="border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300 [&>svg]:text-amber-600 dark:[&>svg]:text-amber-400">
                   <AlertTriangleIcon className="size-4" />
                   <AlertDescription>
                     Dejá esta pantalla abierta mientras trabajás en ARCA. El
-                    código es válido por 4 horas, así que no apures el trámite.
-                    Si ARCA bloquea el acceso desde el botón, entrá manualmente
-                    escribiendo arca.gob.ar en una pestaña nueva.
+                    código es válido por 45 minutos. Si el portal bloquea el
+                    acceso desde el botón, entrá manualmente al sitio
+                    correspondiente al ambiente indicado arriba.
                   </AlertDescription>
                 </Alert>
 
                 {/* Las 3 tareas en ARCA con Accordion */}
                 <div className="space-y-2">
                   <p className="text-sm font-semibold text-foreground">
-                    Dentro de ARCA hacé estas 3 cosas, en orden:
+                    {isHomologacionEnvironment
+                      ? "Dentro de homologación hacé estas 3 cosas, en orden:"
+                      : "Dentro de ARCA hacé estas 3 cosas, en orden:"}
                   </p>
 
                   <Accordion
@@ -407,24 +514,13 @@ export function ArcaOnboarding({
                               Subí el código y descargá el certificado
                             </div>
                             <div className="text-xs text-[#0C447C]/65 dark:text-[#E6F1FB]/65">
-                              Administración de Certificados Digitales
+                              {certificateTaskSource}
                             </div>
                           </div>
                         </div>
                       </AccordionTrigger>
                       <AccordionContent className="h-auto bg-card px-4 pb-4 pt-3">
-                        <InstructionList
-                          items={[
-                            "Entrá a arca.gob.ar e iniciá sesión con tu CUIT y clave fiscal.",
-                            "Buscá y abrí Administración de Certificados Digitales.",
-                            "Hacé click en Agregar alias.",
-                            "En Alias escribí cualquier nombre, por ejemplo: conta-app.",
-                            "En Seleccionar Archivo elegí el archivo `.csr` de código que descargaste.",
-                            "Hacé click en Agregar Alias.",
-                            "En la lista de alias buscá tu alias y hacé click en Ver.",
-                            "Hacé click en Descargar. Guardá ese archivo, lo vas a necesitar en el paso 3.",
-                          ]}
-                        />
+                        <InstructionList items={certificateInstructions} />
                       </AccordionContent>
                     </AccordionItem>
 
@@ -442,37 +538,24 @@ export function ArcaOnboarding({
                               Autorizá los servicios de facturación
                             </div>
                             <div className="text-xs text-[#0C447C]/65 dark:text-[#E6F1FB]/65">
-                              Administrador de Relaciones
+                              {serviceTaskSource}
                             </div>
                           </div>
                         </div>
                       </AccordionTrigger>
                       <AccordionContent className="h-auto space-y-3 bg-card px-4 pb-4 pt-3">
-                        <InstructionList
-                          items={[
-                            "Dentro de ARCA, buscá y abrí Administrador de Relaciones. Este paso autoriza Web Services, no crea puntos de venta.",
-                            "Hacé click en Incorporar nueva Relación.",
-                            "En la pantalla de Incorporar nueva Relación, revisá que Autorizante (Dador) y Representado sean tu CUIT.",
-                            "Para Facturación Electrónica común (WSFE), en Servicio presioná Buscar.",
-                            "Seleccioná ARCA → WebServices → Facturación Electrónica.",
-                            "Luego, en Representante, presioná Buscar.",
-                            "Seleccioná el alias/certificado que creaste en el paso anterior, por ejemplo conta-app.",
-                            "Confirmá la relación.",
-                            "Si también vas a emitir Factura E: Administrador de Relaciones → Incorporar nueva Relación → Buscar Servicio → ARCA → WebServices → Factura electronica de exportacion.",
-                            "Para Factura E, después buscá el Representante, seleccioná el mismo alias/certificado y confirmá la relación.",
-                          ]}
-                        />
+                        <InstructionList items={serviceInstructions} />
                         <Alert className="border-[#B5D4F4] bg-[#E6F1FB] text-[#0C447C] dark:border-[#185FA5]/60 dark:bg-[#0C447C]/30 dark:text-[#E6F1FB] [&>svg]:text-[#185FA5] dark:[&>svg]:text-[#B5D4F4]">
                           <InfoIcon className="size-4" />
                           <AlertDescription className="space-y-2 text-xs">
                             <p>
-                              El Representante no es otra persona: es el
-                              certificado/alias que creaste para que Contable
-                              pueda operar por Web Services.
+                              {isHomologacionEnvironment
+                                ? "En homologación, WSASS concentra la creación del certificado de prueba y la autorización a servicios."
+                                : "El Representante no es otra persona: es el certificado/alias que creaste para que Contable pueda operar por Web Services."}
                             </p>
                             <p>
-                              ARCA suele bloquear links externos o profundos.
-                              Por eso estas instrucciones usan los nombres que
+                             ARCA suele bloquear links externos o profundos.
+                             Por eso estas instrucciones usan los nombres que
                               tenés que buscar dentro del sitio.
                             </p>
                           </AlertDescription>
@@ -494,19 +577,13 @@ export function ArcaOnboarding({
                               Creá y anotá los puntos de venta
                             </div>
                             <div className="text-xs text-[#0C447C]/65 dark:text-[#E6F1FB]/65">
-                              Administración de puntos de venta y domicilios
+                              {pointOfSaleTaskSource}
                             </div>
                           </div>
                         </div>
                       </AccordionTrigger>
                       <AccordionContent className="h-auto space-y-3 bg-card px-4 pb-4 pt-3">
-                        <InstructionList
-                          items={[
-                            "Dentro de ARCA, buscá Administración de puntos de venta y domicilios. Este paso es aparte de Administrador de Relaciones.",
-                            "Creá un punto de venta de tipo Factura Electrónica - Monotributo - Web Services. Anotá el número que te asigna.",
-                            "Si también emitís facturas al exterior: creá otro de tipo Comprobantes de Exportación - Web Services. Anotá ese número también.",
-                          ]}
-                        />
+                        <InstructionList items={pointOfSaleInstructions} />
                         <Alert className="border-[#B5D4F4] bg-[#E6F1FB] text-[#0C447C] dark:border-[#185FA5]/60 dark:bg-[#0C447C]/30 dark:text-[#E6F1FB] [&>svg]:text-[#185FA5] dark:[&>svg]:text-[#B5D4F4]">
                           <InfoIcon className="size-4" />
                           <AlertDescription className="text-xs">

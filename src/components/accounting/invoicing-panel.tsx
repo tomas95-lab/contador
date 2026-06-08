@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/select"
 import {
   formatARS,
+  formatInvoiceAmount,
   formatPaymentDate,
   formatPercent,
   getFinancialMetrics,
@@ -38,7 +39,11 @@ import {
   sumPayments,
 } from "@/lib/accounting"
 import { createDemoArcaAnnualSummary } from "@/data/demo"
-import { fetchArcaAnnualSummary, type ArcaAnnualSummary } from "@/lib/arca-api"
+import {
+  fetchArcaAnnualSummary,
+  fetchArcaDestinationCountries,
+  type ArcaAnnualSummary,
+} from "@/lib/arca-api"
 import {
   fetchForeignClients,
   saveForeignClient,
@@ -51,6 +56,7 @@ import type {
 } from "@/types/accounting"
 
 type InvoicingPanelProps = {
+  arcaEnvironment?: "homologacion" | "production" | "unknown"
   category: TaxCategory
   isDemo?: boolean
   invoices: GeneratedInvoice[]
@@ -59,6 +65,7 @@ type InvoicingPanelProps = {
     payment: IncomePayment,
     options?: {
       invoiceType?: "C" | "E"
+      amount?: number
       currencyId?: "DOL" | "PES"
       exchangeRate?: number
       clientCuit?: string
@@ -83,6 +90,11 @@ type InvoiceConfirmation = {
   payment: IncomePayment
 }
 
+type CountryOption = {
+  label: string
+  value: string
+}
+
 const ivaConditionOptions = [
   { label: "Resp. inscripto", value: "1" },
   { label: "Monotributo", value: "6" },
@@ -90,16 +102,27 @@ const ivaConditionOptions = [
   { label: "Consumidor final", value: "5" },
 ]
 
-const foreignCountryOptions = [
-  { label: "USA", value: "840" },
-  { label: "España", value: "724" },
-  { label: "Uruguay", value: "858" },
-  { label: "Brasil", value: "076" },
-  { label: "Reino Unido", value: "826" },
-  { label: "Alemania", value: "276" },
-  { label: "Canadá", value: "124" },
-  { label: "Francia", value: "250" },
-  { label: "Países Bajos", value: "528" },
+const fallbackForeignCountryOptions: CountryOption[] = [
+  { label: "Estados Unidos", value: "212" },
+  { label: "España", value: "410" },
+  { label: "Uruguay", value: "225" },
+  { label: "Brasil", value: "203" },
+  { label: "Reino Unido", value: "426" },
+  { label: "Alemania", value: "438" },
+  { label: "Canadá", value: "204" },
+  { label: "Francia", value: "412" },
+  { label: "Países Bajos", value: "423" },
+  { label: "México", value: "218" },
+  { label: "Chile", value: "208" },
+  { label: "Colombia", value: "205" },
+  { label: "Perú", value: "222" },
+  { label: "Portugal", value: "425" },
+  { label: "Italia", value: "417" },
+  { label: "Australia", value: "501" },
+  { label: "Singapur", value: "333" },
+  { label: "China", value: "310" },
+  { label: "India", value: "315" },
+  { label: "Japón", value: "320" },
 ]
 
 const platformOptions = [
@@ -111,6 +134,7 @@ const platformOptions = [
 ]
 
 export function InvoicingPanel({
+  arcaEnvironment = "unknown",
   category,
   isDemo = false,
   invoices,
@@ -138,6 +162,9 @@ export function InvoicingPanel({
   const [foreignClients, setForeignClients] = React.useState<ForeignClient[]>(
     []
   )
+  const [foreignCountryOptions, setForeignCountryOptions] = React.useState<
+    CountryOption[]
+  >(fallbackForeignCountryOptions)
   const [selectedForeignClientIds, setSelectedForeignClientIds] =
     React.useState<Record<string, string>>({})
   const [foreignClientNames, setForeignClientNames] = React.useState<
@@ -160,6 +187,9 @@ export function InvoicingPanel({
   const [exchangeRates, setExchangeRates] = React.useState<
     Record<string, string>
   >({})
+  const [exportInvoiceAmounts, setExportInvoiceAmounts] = React.useState<
+    Record<string, string>
+  >({})
   const [saveClientByPayment, setSaveClientByPayment] = React.useState<
     Record<string, boolean>
   >({})
@@ -167,6 +197,9 @@ export function InvoicingPanel({
     React.useState<InvoiceConfirmation | null>(null)
   const pendingPayments = payments.filter(
     (payment) => payment.invoiceStatus === "pendiente"
+  )
+  const emittingPayments = payments.filter(
+    (payment) => payment.invoiceStatus === "emitiendo"
   )
   const invoicedPayments = payments.filter(
     (payment) => payment.invoiceStatus === "facturado"
@@ -203,7 +236,33 @@ export function InvoicingPanel({
       }
     }
 
+    async function loadDestinationCountries() {
+      try {
+        const countries = await fetchArcaDestinationCountries()
+
+        if (!cancelled) {
+          setForeignCountryOptions(
+            mergeCountryOptions(
+              countries
+                .map((country) => ({
+                  label: country.name,
+                  value: country.code,
+                })),
+              fallbackForeignCountryOptions
+            )
+              .filter((country) => country.value)
+              .sort((a, b) => a.label.localeCompare(b.label, "es"))
+          )
+        }
+      } catch {
+        if (!cancelled) {
+          setForeignCountryOptions(fallbackForeignCountryOptions)
+        }
+      }
+    }
+
     void loadForeignClients()
+    void loadDestinationCountries()
 
     return () => {
       cancelled = true
@@ -261,7 +320,10 @@ export function InvoicingPanel({
           }`
         : "consumidor final"
 
-      description = `¿Estás seguro que querés emitir la Factura C real en ARCA por ${formatARS(
+      description = `¿Estás seguro que querés emitir la Factura C en ${formatArcaEnvironmentForText(
+        arcaEnvironment,
+        isDemo
+      )} por ${formatARS(
         payment.amount
       )} para ${payment.client} (${receiver})?`
     } else {
@@ -273,12 +335,16 @@ export function InvoicingPanel({
       }
 
       const currencyId = getExportCurrencyId(payment.id)
+      const invoiceAmount = getExportInvoiceAmount(payment)
       const exchangeRate = getExchangeRate(payment.id)
       const amountArs = getExportAmountArs(payment)
 
-      description = `¿Estás seguro que querés emitir la Factura E real en ARCA por ${
+      description = `¿Estás seguro que querés emitir la Factura E en ${formatArcaEnvironmentForText(
+        arcaEnvironment,
+        isDemo
+      )} por ${
         currencyId === "DOL"
-          ? `USD ${formatNumber(payment.amount)} (${formatARS(amountArs)})`
+          ? `USD ${formatNumber(invoiceAmount)} (${formatARS(amountArs)})`
           : formatARS(payment.amount)
       } para ${foreignClientNames[payment.id]?.trim()}? Tipo de cambio: ${
         currencyId === "DOL" ? exchangeRate : 1
@@ -327,6 +393,7 @@ export function InvoicingPanel({
         clearDomesticInvoiceState(payment.id)
       } else {
         const currencyId = getExportCurrencyId(payment.id)
+        const invoiceAmount = getExportInvoiceAmount(payment)
         const exchangeRate = getExchangeRate(payment.id)
         const countryCode = foreignClientCountryCodes[payment.id]?.trim()
         const foreignClientName = foreignClientNames[payment.id]?.trim()
@@ -338,6 +405,7 @@ export function InvoicingPanel({
           foreignClientPlatforms[payment.id]?.trim() || undefined
 
         await onGenerateInvoice(payment, {
+          amount: invoiceAmount,
           currencyId,
           exchangeRate,
           foreignClientAddress,
@@ -425,6 +493,7 @@ export function InvoicingPanel({
     const countryCode = foreignClientCountryCodes[payment.id]?.trim()
     const currencyId = getExportCurrencyId(payment.id)
     const exchangeRate = getExchangeRate(payment.id)
+    const invoiceAmount = getExportInvoiceAmount(payment)
 
     if (!name) {
       return "Para Factura E necesito el nombre del cliente exterior."
@@ -434,7 +503,17 @@ export function InvoicingPanel({
       return "Para Factura E necesito el país del cliente exterior."
     }
 
-    if (currencyId === "DOL" && exchangeRate <= 0) {
+    if (
+      currencyId === "DOL" &&
+      (!Number.isFinite(invoiceAmount) || invoiceAmount <= 0)
+    ) {
+      return "Para Factura E en USD necesito el importe en dólares."
+    }
+
+    if (
+      currencyId === "DOL" &&
+      (!Number.isFinite(exchangeRate) || exchangeRate <= 0)
+    ) {
       return "Para Factura E en USD necesito un tipo de cambio positivo."
     }
 
@@ -442,18 +521,29 @@ export function InvoicingPanel({
   }
 
   function getExportCurrencyId(paymentId: string): "DOL" | "PES" {
-    return exportCurrencyIds[paymentId] ?? "DOL"
+    return exportCurrencyIds[paymentId] ?? "PES"
   }
 
   function getExchangeRate(paymentId: string) {
     return Number((exchangeRates[paymentId] ?? "0").replace(",", "."))
   }
 
+  function getExportInvoiceAmount(payment: IncomePayment) {
+    const currencyId = getExportCurrencyId(payment.id)
+
+    if (currencyId === "PES") {
+      return payment.amount
+    }
+
+    return Number((exportInvoiceAmounts[payment.id] ?? "0").replace(",", "."))
+  }
+
   function getExportAmountArs(payment: IncomePayment) {
     const currencyId = getExportCurrencyId(payment.id)
     const exchangeRate = getExchangeRate(payment.id)
+    const invoiceAmount = getExportInvoiceAmount(payment)
 
-    return currencyId === "DOL" ? payment.amount * exchangeRate : payment.amount
+    return currencyId === "DOL" ? invoiceAmount * exchangeRate : payment.amount
   }
 
   function getCategoryImpact(payment: IncomePayment) {
@@ -482,6 +572,7 @@ export function InvoicingPanel({
     setForeignClientAddresses((current) => omitKey(current, paymentId))
     setForeignClientPlatforms((current) => omitKey(current, paymentId))
     setExportCurrencyIds((current) => omitKey(current, paymentId))
+    setExportInvoiceAmounts((current) => omitKey(current, paymentId))
     setExchangeRates((current) => omitKey(current, paymentId))
     setSaveClientByPayment((current) => omitKey(current, paymentId))
   }
@@ -527,6 +618,13 @@ export function InvoicingPanel({
               <p className="mb-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                 {invoiceError}
               </p>
+            ) : null}
+            {emittingPayments.length > 0 ? (
+              <div className="mb-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800 dark:border-sky-900 dark:bg-sky-950 dark:text-sky-200">
+                {emittingPayments.length === 1
+                  ? "Hay un cobro en emisión. Revisá las facturas emitidas antes de volver a intentarlo."
+                  : `Hay ${emittingPayments.length} cobros en emisión. Revisá las facturas emitidas antes de volver a intentarlo.`}
+              </div>
             ) : null}
             {pendingPayments.length > 0 ? (
               <div className="space-y-2">
@@ -583,8 +681,10 @@ export function InvoicingPanel({
                         countryCode={
                           foreignClientCountryCodes[payment.id] ?? ""
                         }
+                        countryOptions={foreignCountryOptions}
                         currencyId={getExportCurrencyId(payment.id)}
                         exchangeRate={exchangeRates[payment.id] ?? ""}
+                        invoiceAmount={exportInvoiceAmounts[payment.id] ?? ""}
                         foreignClients={foreignClients}
                         isIssuing={isInvoiceEmissionLocked}
                         onClientAddressChange={(value) =>
@@ -620,6 +720,12 @@ export function InvoicingPanel({
                         onEmit={() => void handleGenerateInvoice(payment)}
                         onExchangeRateChange={(value) =>
                           setExchangeRates((current) => ({
+                            ...current,
+                            [payment.id]: value.replace(/[^\d.,]/g, ""),
+                          }))
+                        }
+                        onInvoiceAmountChange={(value) =>
+                          setExportInvoiceAmounts((current) => ({
                             ...current,
                             [payment.id]: value.replace(/[^\d.,]/g, ""),
                           }))
@@ -706,7 +812,7 @@ export function InvoicingPanel({
                         </p>
                       </div>
                       <span className="font-medium tabular-nums">
-                        {formatARS(invoice.amount)}
+                        {formatInvoiceAmount(invoice)}
                       </span>
                       <Button
                         onClick={() => downloadInvoiceHtml(invoice)}
@@ -905,8 +1011,10 @@ function ExportInvoiceFields({
   clientName,
   clientTaxId,
   countryCode,
+  countryOptions,
   currencyId,
   exchangeRate,
+  invoiceAmount,
   foreignClients,
   isIssuing,
   onClientAddressChange,
@@ -916,6 +1024,7 @@ function ExportInvoiceFields({
   onCurrencyChange,
   onEmit,
   onExchangeRateChange,
+  onInvoiceAmountChange,
   onPlatformChange,
   onSaveClientChange,
   onSavedClientChange,
@@ -930,8 +1039,10 @@ function ExportInvoiceFields({
   clientName: string
   clientTaxId: string
   countryCode: string
+  countryOptions: CountryOption[]
   currencyId: "DOL" | "PES"
   exchangeRate: string
+  invoiceAmount: string
   foreignClients: ForeignClient[]
   isIssuing: boolean
   onClientAddressChange: (value: string) => void
@@ -941,6 +1052,7 @@ function ExportInvoiceFields({
   onCurrencyChange: (value: "DOL" | "PES") => void
   onEmit: () => void
   onExchangeRateChange: (value: string) => void
+  onInvoiceAmountChange: (value: string) => void
   onPlatformChange: (value: string) => void
   onSaveClientChange: (checked: boolean) => void
   onSavedClientChange: (clientId: string) => void
@@ -952,6 +1064,11 @@ function ExportInvoiceFields({
   const parsedRate = Number(exchangeRate.replace(",", "."))
   const canShowArsAmount =
     currencyId === "PES" || (Number.isFinite(parsedRate) && parsedRate > 0)
+  const selectedCountryValue = countryOptions.some(
+    (country) => country.value === countryCode
+  )
+    ? countryCode
+    : ""
 
   return (
     <div className="mt-4 space-y-4 rounded-lg border bg-muted/20 p-3">
@@ -990,19 +1107,32 @@ function ExportInvoiceFields({
           />
         </div>
         <div className="space-y-1">
-          <Label>País</Label>
-          <Select onValueChange={onCountryCodeChange} value={countryCode}>
+          <Label>País destino</Label>
+          <Select
+            onValueChange={onCountryCodeChange}
+            value={selectedCountryValue}
+          >
             <SelectTrigger>
               <SelectValue placeholder="Seleccionar país" />
             </SelectTrigger>
             <SelectContent>
-              {foreignCountryOptions.map((country) => (
+              {countryOptions.map((country) => (
                 <SelectItem key={country.value} value={country.value}>
-                  {country.label}
+                  {country.label} ({country.value})
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          <Input
+            id={`foreign-country-${payment.id}`}
+            className="mt-2"
+            inputMode="numeric"
+            onChange={(event) =>
+              onCountryCodeChange(event.target.value.replace(/\D/g, ""))
+            }
+            placeholder="Código ARCA"
+            value={countryCode}
+          />
         </div>
         <div className="space-y-1">
           <Label htmlFor={`foreign-tax-${payment.id}`}>
@@ -1041,7 +1171,7 @@ function ExportInvoiceFields({
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-[160px_1fr_1fr]">
+      <div className="grid gap-3 md:grid-cols-[160px_1fr_1fr_1fr]">
         <div className="space-y-1">
           <Label>Moneda</Label>
           <Select onValueChange={onCurrencyChange} value={currencyId}>
@@ -1054,6 +1184,17 @@ function ExportInvoiceFields({
             </SelectContent>
           </Select>
         </div>
+        {currencyId === "DOL" ? (
+          <div className="space-y-1">
+            <Label htmlFor={`export-amount-${payment.id}`}>Importe USD</Label>
+            <Input
+              id={`export-amount-${payment.id}`}
+              inputMode="decimal"
+              onChange={(event) => onInvoiceAmountChange(event.target.value)}
+              value={invoiceAmount}
+            />
+          </div>
+        ) : null}
         {currencyId === "DOL" ? (
           <div className="space-y-1">
             <Label htmlFor={`exchange-rate-${payment.id}`}>
@@ -1172,11 +1313,11 @@ function buildInvoiceHtml(invoice: GeneratedInvoice) {
       <tbody>
         <tr>
           <td>${escapeHtml(invoice.description)}</td>
-          <td class="right">${formatARS(invoice.amount)}</td>
+          <td class="right">${formatInvoiceAmount(invoice)}</td>
         </tr>
       </tbody>
     </table>
-    <p class="right total">Total: ${formatARS(invoice.amount)}</p>
+    <p class="right total">Total: ${formatInvoiceAmount(invoice)}</p>
     ${noticeMarkup}
   </section>
 </body>
@@ -1204,4 +1345,41 @@ function escapeHtml(value: string) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;")
+}
+
+function formatArcaEnvironmentForText(
+  environment: "homologacion" | "production" | "unknown",
+  isDemo: boolean
+) {
+  if (isDemo) {
+    return "modo demo"
+  }
+
+  if (environment === "homologacion") {
+    return "ARCA homologación"
+  }
+
+  if (environment === "production") {
+    return "ARCA producción real"
+  }
+
+  return "ARCA"
+}
+
+function mergeCountryOptions(
+  primaryOptions: CountryOption[],
+  fallbackOptions: CountryOption[]
+) {
+  const optionsByValue = new Map<string, CountryOption>()
+
+  for (const option of [...fallbackOptions, ...primaryOptions]) {
+    const value = option.value.trim()
+    const label = option.label.trim()
+
+    if (value && label) {
+      optionsByValue.set(value, { label, value })
+    }
+  }
+
+  return Array.from(optionsByValue.values())
 }

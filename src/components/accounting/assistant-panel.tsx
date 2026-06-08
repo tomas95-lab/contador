@@ -56,6 +56,7 @@ import type {
 } from "@/types/accounting"
 
 type AssistantPanelProps = {
+  arcaEnvironment?: "homologacion" | "production" | "unknown"
   payments: IncomePayment[]
   category: TaxCategory
   isDemo?: boolean
@@ -70,6 +71,9 @@ type AssistantPanelProps = {
     payment: IncomePayment,
     options?: {
       invoiceType?: "C" | "E"
+      amount?: number
+      currencyId?: "DOL" | "PES"
+      exchangeRate?: number
       clientCuit?: string
       clientName?: string
       clientAddress?: string
@@ -101,8 +105,12 @@ const ivaConditionOptions = [
 ]
 
 const assistantIntroStorageKey = "contable-assistant-intro-shown"
+const invoiceNumberFormatter = new Intl.NumberFormat("es-AR", {
+  maximumFractionDigits: 2,
+})
 
 export function AssistantPanel({
+  arcaEnvironment = "unknown",
   payments,
   category,
   isDemo = false,
@@ -123,6 +131,11 @@ export function AssistantPanel({
     React.useState("")
   const [invoiceError, setInvoiceError] = React.useState("")
   const [invoiceIvaCondition, setInvoiceIvaCondition] = React.useState("1")
+  const [invoiceCurrencyId, setInvoiceCurrencyId] = React.useState<
+    "DOL" | "PES"
+  >("PES")
+  const [invoiceExchangeRate, setInvoiceExchangeRate] = React.useState("")
+  const [invoiceAmount, setInvoiceAmount] = React.useState("")
   const [pendingInvoiceDraft, setPendingInvoiceDraft] =
     React.useState<PendingInvoiceDraft | null>(null)
   const [invoiceConfirmation, setInvoiceConfirmation] =
@@ -237,6 +250,9 @@ export function AssistantPanel({
           setInvoiceDestinationCountryCode("")
           setInvoiceError("")
           setInvoiceIvaCondition("1")
+          setInvoiceCurrencyId("PES")
+          setInvoiceExchangeRate("")
+          setInvoiceAmount("")
           await onAddMessage({
             role: "assistant",
             content: [
@@ -338,6 +354,8 @@ export function AssistantPanel({
     const exportClientAddress = invoiceClientAddress.trim()
     const exportClientName = invoiceClientName.trim()
     const destinationCountryCode = Number(invoiceDestinationCountryCode)
+    const exportInvoiceAmount = parseDecimal(invoiceAmount)
+    const exportExchangeRate = parseDecimal(invoiceExchangeRate)
 
     if (
       invoiceType === "E" &&
@@ -348,6 +366,26 @@ export function AssistantPanel({
     ) {
       setInvoiceError(
         "Para Factura E necesito nombre, domicilio y código de país destino del cliente del exterior."
+      )
+      return
+    }
+
+    if (
+      invoiceType === "E" &&
+      invoiceCurrencyId === "DOL" &&
+      (!Number.isFinite(exportInvoiceAmount) || exportInvoiceAmount <= 0)
+    ) {
+      setInvoiceError("Para Factura E en USD necesito el importe en dólares.")
+      return
+    }
+
+    if (
+      invoiceType === "E" &&
+      invoiceCurrencyId === "DOL" &&
+      (!Number.isFinite(exportExchangeRate) || exportExchangeRate <= 0)
+    ) {
+      setInvoiceError(
+        "Para Factura E en USD necesito un tipo de cambio positivo."
       )
       return
     }
@@ -392,6 +430,8 @@ export function AssistantPanel({
     const exportClientName = invoiceClientName.trim()
     const exportClientTaxId = invoiceClientTaxId.trim()
     const destinationCountryCode = Number(invoiceDestinationCountryCode)
+    const exportInvoiceAmount = parseDecimal(invoiceAmount)
+    const exportExchangeRate = parseDecimal(invoiceExchangeRate)
 
     setInvoiceConfirmation(null)
     setInvoiceError("")
@@ -399,6 +439,15 @@ export function AssistantPanel({
     try {
       await onGenerateInvoice(latestPayment, {
         invoiceType,
+        amount:
+          invoiceType === "E" && invoiceCurrencyId === "DOL"
+            ? exportInvoiceAmount
+            : undefined,
+        currencyId: invoiceType === "E" ? invoiceCurrencyId : undefined,
+        exchangeRate:
+          invoiceType === "E" && invoiceCurrencyId === "DOL"
+            ? exportExchangeRate
+            : undefined,
         clientCuit: clientCuit || undefined,
         clientName: invoiceType === "E" ? exportClientName : undefined,
         clientAddress: invoiceType === "E" ? exportClientAddress : undefined,
@@ -411,8 +460,12 @@ export function AssistantPanel({
       })
       await onAddMessage({
         role: "assistant",
-        content: `Listo: emití la Factura ${invoiceType} de **${latestPayment.client}** por **${formatARS(
-          latestPayment.amount
+        content: `Listo: emití la Factura ${invoiceType} de **${latestPayment.client}** por **${formatPreparedInvoiceAmount(
+          invoiceType,
+          latestPayment.amount,
+          invoiceCurrencyId,
+          invoiceAmount,
+          invoiceExchangeRate
         )}** y la guardé en la app.`,
       })
       setPendingInvoiceDraft(null)
@@ -421,6 +474,9 @@ export function AssistantPanel({
       setInvoiceClientName("")
       setInvoiceClientTaxId("")
       setInvoiceDestinationCountryCode("")
+      setInvoiceCurrencyId("PES")
+      setInvoiceExchangeRate("")
+      setInvoiceAmount("")
     } catch (error) {
       const message =
         error instanceof Error
@@ -518,12 +574,20 @@ export function AssistantPanel({
                 clientTaxId={invoiceClientTaxId}
                 destinationCountryCode={invoiceDestinationCountryCode}
                 error={invoiceError}
+                exchangeRate={invoiceExchangeRate}
+                invoiceAmount={invoiceAmount}
+                invoiceCurrencyId={invoiceCurrencyId}
                 invoiceType={pendingInvoiceDraft.invoiceType}
                 isIssuing={isIssuingInvoice}
                 ivaCondition={invoiceIvaCondition}
+                arcaEnvironment={arcaEnvironment}
+                isDemo={isDemo}
                 onCancel={() => {
                   setPendingInvoiceDraft(null)
                   setInvoiceError("")
+                  setInvoiceCurrencyId("PES")
+                  setInvoiceExchangeRate("")
+                  setInvoiceAmount("")
                 }}
                 onClientCuitChange={(value) =>
                   setInvoiceClientCuit(value.replace(/\D/g, "").slice(0, 11))
@@ -537,6 +601,13 @@ export function AssistantPanel({
                   )
                 }
                 onEmit={() => void handleEmitPreparedInvoice()}
+                onExchangeRateChange={(value) =>
+                  setInvoiceExchangeRate(value.replace(/[^\d.,]/g, ""))
+                }
+                onInvoiceAmountChange={(value) =>
+                  setInvoiceAmount(value.replace(/[^\d.,]/g, ""))
+                }
+                onInvoiceCurrencyChange={setInvoiceCurrencyId}
                 onInvoiceTypeChange={(invoiceType) =>
                   setPendingInvoiceDraft((current) =>
                     current
@@ -602,8 +673,15 @@ export function AssistantPanel({
           invoiceConfirmation
             ? `¿Estás seguro que querés emitir la Factura ${
                 invoiceConfirmation.invoiceType
-              } real en ARCA por ${formatARS(
-                invoiceConfirmation.payment.amount
+              } en ${formatArcaEnvironmentForText(
+                arcaEnvironment,
+                isDemo
+              )} por ${formatPreparedInvoiceAmount(
+                invoiceConfirmation.invoiceType,
+                invoiceConfirmation.payment.amount,
+                invoiceCurrencyId,
+                invoiceAmount,
+                invoiceExchangeRate
               )} para ${invoiceConfirmation.payment.client} (${
                 invoiceConfirmation.receiver
               })?`
@@ -675,8 +753,13 @@ function PreparedInvoiceCard({
   clientTaxId,
   destinationCountryCode,
   error,
+  exchangeRate,
+  invoiceAmount,
+  invoiceCurrencyId,
   invoiceType,
   isIssuing,
+  arcaEnvironment,
+  isDemo,
   ivaCondition,
   onCancel,
   onClientAddressChange,
@@ -685,6 +768,9 @@ function PreparedInvoiceCard({
   onClientTaxIdChange,
   onDestinationCountryCodeChange,
   onEmit,
+  onExchangeRateChange,
+  onInvoiceAmountChange,
+  onInvoiceCurrencyChange,
   onInvoiceTypeChange,
   onIvaConditionChange,
   payment,
@@ -695,8 +781,13 @@ function PreparedInvoiceCard({
   clientTaxId: string
   destinationCountryCode: string
   error: string
+  exchangeRate: string
+  invoiceAmount: string
+  invoiceCurrencyId: "DOL" | "PES"
   invoiceType: "C" | "E"
   isIssuing: boolean
+  arcaEnvironment: "homologacion" | "production" | "unknown"
+  isDemo: boolean
   ivaCondition: string
   onCancel: () => void
   onClientAddressChange: (value: string) => void
@@ -705,6 +796,9 @@ function PreparedInvoiceCard({
   onClientTaxIdChange: (value: string) => void
   onDestinationCountryCodeChange: (value: string) => void
   onEmit: () => void
+  onExchangeRateChange: (value: string) => void
+  onInvoiceAmountChange: (value: string) => void
+  onInvoiceCurrencyChange: (value: "DOL" | "PES") => void
   onInvoiceTypeChange: (value: "C" | "E") => void
   onIvaConditionChange: (value: string) => void
   payment: IncomePayment
@@ -718,7 +812,9 @@ function PreparedInvoiceCard({
             <div className="flex flex-wrap items-center gap-2">
               <p className="font-medium">Factura lista para emitir</p>
               <Badge variant="secondary">Factura {invoiceType}</Badge>
-              <Badge variant="outline">ARCA real</Badge>
+              <Badge variant="outline">
+                {formatArcaEnvironmentBadge(arcaEnvironment, isDemo)}
+              </Badge>
             </div>
             <div className="space-y-2">
               <Label>Tipo de comprobante</Label>
@@ -745,7 +841,13 @@ function PreparedInvoiceCard({
               <div className="rounded-lg border p-3">
                 <span className="text-muted-foreground">Importe</span>
                 <div className="mt-1 font-medium tabular-nums">
-                  {formatARS(payment.amount)}
+                  {formatPreparedInvoiceAmount(
+                    invoiceType,
+                    payment.amount,
+                    invoiceCurrencyId,
+                    invoiceAmount,
+                    exchangeRate
+                  )}
                 </div>
               </div>
               <div className="rounded-lg border p-3">
@@ -845,6 +947,53 @@ function PreparedInvoiceCard({
                     value={clientTaxId}
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label>Moneda</Label>
+                  <Select
+                    onValueChange={(value) =>
+                      onInvoiceCurrencyChange(value as "DOL" | "PES")
+                    }
+                    value={invoiceCurrencyId}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="PES">ARS</SelectItem>
+                      <SelectItem value="DOL">USD</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {invoiceCurrencyId === "DOL" ? (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="assistant-export-amount">
+                        Importe USD
+                      </Label>
+                      <Input
+                        id="assistant-export-amount"
+                        inputMode="decimal"
+                        onChange={(event) =>
+                          onInvoiceAmountChange(event.target.value)
+                        }
+                        value={invoiceAmount}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="assistant-export-exchange-rate">
+                        Tipo de cambio
+                      </Label>
+                      <Input
+                        id="assistant-export-exchange-rate"
+                        inputMode="decimal"
+                        onChange={(event) =>
+                          onExchangeRateChange(event.target.value)
+                        }
+                        value={exchangeRate}
+                      />
+                    </div>
+                  </>
+                ) : null}
               </div>
             )}
             {error ? (
@@ -1017,4 +1166,70 @@ function normalizeText(value: string) {
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")
     .toLowerCase()
+}
+
+function parseDecimal(value: string) {
+  return Number(value.replace(",", "."))
+}
+
+function formatPreparedInvoiceAmount(
+  invoiceType: "C" | "E",
+  paymentAmount: number,
+  currencyId: "DOL" | "PES",
+  invoiceAmount: string,
+  exchangeRate: string
+) {
+  if (invoiceType !== "E" || currencyId !== "DOL") {
+    return formatARS(paymentAmount)
+  }
+
+  const amount = parseDecimal(invoiceAmount)
+  const rate = parseDecimal(exchangeRate)
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return "importe USD pendiente"
+  }
+
+  const amountArs =
+    Number.isFinite(rate) && rate > 0 ? ` (${formatARS(amount * rate)})` : ""
+
+  return `USD ${invoiceNumberFormatter.format(amount)}${amountArs}`
+}
+
+function formatArcaEnvironmentForText(
+  environment: "homologacion" | "production" | "unknown",
+  isDemo: boolean
+) {
+  if (isDemo) {
+    return "modo demo"
+  }
+
+  if (environment === "homologacion") {
+    return "ARCA homologación"
+  }
+
+  if (environment === "production") {
+    return "ARCA producción real"
+  }
+
+  return "ARCA"
+}
+
+function formatArcaEnvironmentBadge(
+  environment: "homologacion" | "production" | "unknown",
+  isDemo: boolean
+) {
+  if (isDemo) {
+    return "Demo"
+  }
+
+  if (environment === "homologacion") {
+    return "ARCA homologación"
+  }
+
+  if (environment === "production") {
+    return "ARCA producción"
+  }
+
+  return "ARCA"
 }

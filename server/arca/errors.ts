@@ -59,6 +59,16 @@ const ARCA_ERROR_RULES: ArcaErrorRule[] = [
     severity: "critical",
   },
   {
+    pattern:
+      /cms\.cert\.untrusted|certificado.*no.*emitido.*ac.*confianza|cert.*untrusted/,
+    title: "El certificado no corresponde a este ambiente ARCA",
+    explanation:
+      "ARCA no confía en el certificado cargado para el ambiente actual. Suele pasar cuando se usa un certificado de producción en homologación, o uno generado desde otro circuito.",
+    action:
+      "Como estás en homologación, generá un nuevo código de autorización en Conta y emití el certificado desde WSASS/testing, no desde Administración de Certificados Digitales de producción. Si querés usar ese certificado real, cambiá a producción antes de emitir.",
+    severity: "critical",
+  },
+  {
     pattern: /firma.*(invalida|inválida)|invalid.*signature|cms|pkcs/,
     title: "La firma del pedido no es válida",
     explanation:

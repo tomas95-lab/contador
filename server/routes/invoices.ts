@@ -14,6 +14,7 @@ import {
   emitFacturaE,
   getFacturaEAnnualSummary,
   getFacturaEHistoricalSummary,
+  getWsfexDestinationCountries,
 } from "../arca/wsfex.js"
 import {
   getUserArcaCredentials,
@@ -29,6 +30,18 @@ import {
   buildPersistedInvoiceRow,
   persistEmittedInvoice,
 } from "../lib/invoice-persistence.js"
+import {
+  claimPaymentForInvoiceEmission,
+  releasePaymentEmissionClaim,
+} from "../lib/payment-emission.js"
+
+const invoiceDateSchema = z
+  .string()
+  .trim()
+  .refine(isValidInvoiceDate, {
+    message:
+      "Ingresá una fecha válida en formato AAAA-MM-DD o AAAAMMDD, dentro de los 12 meses anteriores o posteriores.",
+  })
 
 export const emitInvoiceSchema = z
   .object({
@@ -38,21 +51,30 @@ export const emitInvoiceSchema = z
     paymentId: z.string().uuid().optional(),
     payment_id: z.string().uuid().optional(),
     clientCuit: z.string().trim().min(1).optional(),
-    receiverIvaConditionId: z.coerce.number().int().positive().optional(),
+    receiverIvaConditionId: z.coerce
+      .number()
+      .int()
+      .refine((value) => [1, 4, 5, 6].includes(value), {
+        message: "La condición de IVA del receptor no es válida.",
+      })
+      .optional(),
     clientName: z.string().trim().min(1).max(200).optional(),
     clientAddress: z.string().trim().min(1).max(300).optional(),
     clientTaxId: z.string().trim().min(1).max(50).optional(),
     destinationCountryCode: z.coerce.number().int().positive().optional(),
     currencyId: z.enum(["DOL", "PES"]).default("PES"),
-    exchangeRate: z.coerce.number().positive().default(1),
+    exchangeRate: z.coerce
+      .number()
+      .refine(Number.isFinite, "Tipo de cambio inválido.")
+      .default(1),
     foreignClientCountryCode: z.string().trim().min(1).max(3).optional(),
     foreignClientTaxId: z.string().trim().min(1).max(80).optional(),
     foreignClientName: z.string().trim().min(1).max(200).optional(),
     foreignClientAddress: z.string().trim().min(1).max(300).optional(),
     foreignClientPlatform: z.string().trim().min(1).max(80).optional(),
-    serviceFrom: z.string().optional(),
-    serviceTo: z.string().optional(),
-    dueDate: z.string().optional(),
+    serviceFrom: invoiceDateSchema.optional(),
+    serviceTo: invoiceDateSchema.optional(),
+    dueDate: invoiceDateSchema.optional(),
   })
   .superRefine((payload, context) => {
     if (payload.invoiceType !== "E") {
@@ -91,6 +113,21 @@ export const emitInvoiceSchema = z
       })
     }
   })
+  .superRefine((payload, context) => {
+    if (
+      payload.serviceFrom &&
+      payload.serviceTo &&
+      normalizeComparableDate(payload.serviceTo) <
+        normalizeComparableDate(payload.serviceFrom)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "La fecha hasta del servicio no puede ser anterior a la fecha desde.",
+        path: ["serviceTo"],
+      })
+    }
+  })
 
 const annualSummarySchema = z.object({
   year: z.coerce
@@ -115,23 +152,38 @@ export async function emitInvoice(req: Request, res: Response): Promise<void> {
     | Awaited<ReturnType<typeof emitFacturaC>>
     | Awaited<ReturnType<typeof emitFacturaE>>
     | undefined
+  let claimedPaymentId: string | undefined
 
   try {
     credentials = await getRequestArcaCredentials(req)
+    claimedPaymentId = payload.paymentId ?? payload.payment_id
+
+    if (claimedPaymentId) {
+      await claimPaymentForInvoiceEmission({
+        paymentId: claimedPaymentId,
+        userId: credentials.userId,
+      })
+    }
+
     const invoiceInput = buildEmissionPayload(payload)
     result =
       payload.invoiceType === "C"
         ? await emitFacturaC(credentials, invoiceInput)
         : await emitFacturaE(credentials, invoiceInput)
     const persistedInvoice = buildPersistedInvoiceRow({
-      clientName: payload.clientName ?? payload.foreignClientName,
+      clientName:
+        payload.invoiceType === "E"
+          ? payload.foreignClientName ?? payload.clientName
+          : payload.clientName,
       paymentId: payload.paymentId ?? payload.payment_id,
       receiverCuit: invoiceInput.clientCuit,
       result,
       userId: credentials.userId,
     })
 
-    await persistEmittedInvoice(persistedInvoice)
+    const savedInvoice = await persistEmittedInvoice(persistedInvoice, {
+      receiverCuit: invoiceInput.clientCuit,
+    })
     logInvoiceEmissionAudit({
       amount: result.invoice.amount,
       invoiceType: result.invoice.invoiceType,
@@ -141,8 +193,18 @@ export async function emitInvoice(req: Request, res: Response): Promise<void> {
       userId: credentials.userId,
     })
 
-    res.status(201).json(result)
+    res.status(201).json({
+      ...result,
+      invoiceRecord: savedInvoice,
+    })
   } catch (error) {
+    if (!result && credentials && claimedPaymentId) {
+      await releasePaymentEmissionClaim({
+        paymentId: claimedPaymentId,
+        userId: credentials.userId,
+      })
+    }
+
     if (result && credentials) {
       logAuthorizedInvoiceSaveFailure({
         cae: result.cae,
@@ -252,6 +314,24 @@ export async function getArcaPointOfSales(
     res.json({
       wsfe,
     })
+  } catch (error) {
+    if (sendTranslatedArcaError(error, res)) {
+      return
+    }
+
+    throw error
+  }
+}
+
+export async function getArcaDestinationCountries(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const credentials = await getRequestArcaCredentials(req)
+    const countries = await getWsfexDestinationCountries(credentials)
+
+    res.json({ countries })
   } catch (error) {
     if (sendTranslatedArcaError(error, res)) {
       return
@@ -383,6 +463,7 @@ function buildEmissionPayload(payload: z.infer<typeof emitInvoiceSchema>) {
   const normalizedPayload = {
     ...payload,
     clientCuit: normalizedClientCuit,
+    exchangeRate: payload.currencyId === "DOL" ? payload.exchangeRate : 1,
   }
 
   if (payload.invoiceType !== "E") {
@@ -500,4 +581,50 @@ function extractDetailText(value: unknown): string {
 
 function includeRawArcaError() {
   return process.env.NODE_ENV !== "production"
+}
+
+function isValidInvoiceDate(value: string) {
+  const timestamp = parseInvoiceDate(value)
+
+  if (timestamp === null) {
+    return false
+  }
+
+  const today = new Date()
+  const todayUtc = Date.UTC(
+    today.getUTCFullYear(),
+    today.getUTCMonth(),
+    today.getUTCDate()
+  )
+  const oneYearMs = 366 * 24 * 60 * 60 * 1000
+
+  return timestamp >= todayUtc - oneYearMs && timestamp <= todayUtc + oneYearMs
+}
+
+function parseInvoiceDate(value: string) {
+  const normalized = normalizeComparableDate(value)
+
+  if (!/^\d{8}$/.test(normalized)) {
+    return null
+  }
+
+  const year = Number(normalized.slice(0, 4))
+  const month = Number(normalized.slice(4, 6))
+  const day = Number(normalized.slice(6, 8))
+  const timestamp = Date.UTC(year, month - 1, day)
+  const parsed = new Date(timestamp)
+
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) {
+    return null
+  }
+
+  return timestamp
+}
+
+function normalizeComparableDate(value: string) {
+  return value.replaceAll("-", "")
 }

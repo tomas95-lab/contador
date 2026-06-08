@@ -3,6 +3,7 @@ import type { Request, Response } from "express"
 import { z } from "zod"
 
 import { ArcaError } from "../arca/errors.js"
+import { config } from "../config.js"
 import {
   assertArcaEncryptionConfigured,
   hasUserArcaCredentials,
@@ -17,6 +18,7 @@ const TEMPORARY_PRIVATE_KEY_TTL_MS =
 
 type PendingPrivateKey = {
   cuit: string
+  environment: typeof config.arca.environment
   expiresAt: number
   privateKey: string
 }
@@ -40,13 +42,14 @@ export async function getArcaCredentialsStatus(
   const userId = getRequestUserId(req)
   const configured = await hasUserArcaCredentials(userId)
 
-  res.json({ configured })
+  res.json({ configured, arcaEnvironment: config.arca.environment })
 }
 
 export async function generateArcaCsr(
   req: Request,
   res: Response
 ): Promise<void> {
+  pruneExpiredPendingPrivateKeys()
   const userId = getRequestUserId(req)
   const { cuit } = generateCsrSchema.parse(req.body)
   const normalizedCuit = normalizeCuit(cuit)
@@ -76,6 +79,7 @@ export async function generateArcaCsr(
   const privateKey = forge.pki.privateKeyToPem(keyPair.privateKey)
   pendingPrivateKeys.set(userId, {
     cuit: normalizedCuit,
+    environment: config.arca.environment,
     expiresAt: Date.now() + TEMPORARY_PRIVATE_KEY_TTL_MS,
     privateKey,
   })
@@ -89,15 +93,24 @@ export async function saveArcaCredentials(
   req: Request,
   res: Response
 ): Promise<void> {
+  pruneExpiredPendingPrivateKeys()
   const userId = getRequestUserId(req)
   const payload = saveCredentialsSchema.parse(req.body)
   const pending = getPendingPrivateKey(userId)
   const certificate = normalizePem(payload.certificate)
 
+  if (pending.environment !== config.arca.environment) {
+    throw new ArcaError(
+      "El código de autorización fue generado para otro ambiente ARCA. Volvé al paso 1 y generá uno nuevo.",
+      400
+    )
+  }
+
   assertCertificateMatchesPrivateKey(certificate, pending)
   assertArcaEncryptionConfigured()
 
   const credentials: UserArcaCredentials = {
+    arcaEnvironment: config.arca.environment,
     certificate,
     cuit: pending.cuit,
     privateKey: pending.privateKey,
@@ -149,6 +162,7 @@ function assertCertificateMatchesPrivateKey(
     const certificateCuit = certificate.subject
       .getField("serialNumber")
       ?.value?.replace(/\D/g, "")
+    const now = new Date()
 
     if (certificatePublicKey.trim() !== generatedPublicKey.trim()) {
       throw new ArcaError(
@@ -163,6 +177,20 @@ function assertCertificateMatchesPrivateKey(
         400
       )
     }
+
+    if (certificate.validity.notBefore > now) {
+      throw new ArcaError(
+        "El certificado todavía no está vigente. Revisá la fecha del archivo descargado desde ARCA.",
+        400
+      )
+    }
+
+    if (certificate.validity.notAfter <= now) {
+      throw new ArcaError(
+        "El certificado está vencido. Generá un nuevo código de autorización y descargá un certificado vigente desde ARCA.",
+        400
+      )
+    }
   } catch (error) {
     if (error instanceof ArcaError) {
       throw error
@@ -174,4 +202,14 @@ function assertCertificateMatchesPrivateKey(
 
 function normalizePem(value: string) {
   return value.includes("\\n") ? value.replace(/\\n/g, "\n") : value
+}
+
+function pruneExpiredPendingPrivateKeys() {
+  const now = Date.now()
+
+  for (const [userId, pending] of pendingPrivateKeys) {
+    if (pending.expiresAt <= now) {
+      pendingPrivateKeys.delete(userId)
+    }
+  }
 }

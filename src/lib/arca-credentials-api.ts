@@ -1,6 +1,7 @@
 import { backendApiPath, getBackendAuthHeaders } from "@/lib/backend-api"
 
 type CredentialsStatusResponse = {
+  arcaEnvironment: "homologacion" | "production"
   configured: boolean
 }
 

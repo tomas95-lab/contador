@@ -78,6 +78,11 @@ export type ArcaHistoricalInvoices = {
   }[]
 }
 
+export type ArcaDestinationCountry = {
+  code: string
+  name: string
+}
+
 export type ArcaInvoiceEmissionPayload = {
   amount: number
   description: string
@@ -112,7 +117,29 @@ export type EmittedArcaInvoice = {
     number: number
     date: string | null
     amount: number
+    currencyId: string
+    currencyRate: number
+    amountArs: number
     description: string
+  }
+  invoiceRecord?: {
+    id: string
+    payment_id: string | null
+    number: string
+    invoice_type: string
+    point_of_sale: number
+    issue_date: string
+    client: string
+    description: string
+    amount: number
+    currency_id: string
+    exchange_rate: number
+    amount_ars: number
+    cae: string | null
+    cae_expires_at: string | null
+    status: string
+    user_id: string
+    created_at: string
   }
 }
 
@@ -248,6 +275,25 @@ export async function fetchArcaHistoricalInvoices({
   return (await response.json()) as ArcaHistoricalInvoices
 }
 
+export async function fetchArcaDestinationCountries() {
+  const response = await fetch(
+    backendApiPath("/api/invoices/arca/destination-countries"),
+    {
+      headers: await getArcaAuthHeaders(),
+    }
+  )
+
+  if (!response.ok) {
+    return []
+  }
+
+  const data = (await response.json()) as {
+    countries: ArcaDestinationCountry[]
+  }
+
+  return data.countries
+}
+
 export async function fetchArcaAssistantContext({
   metrics,
   payments,
@@ -332,6 +378,10 @@ async function parseArcaError(response: Response) {
     explanation?: string
     action?: string
     severity?: "warning" | "error" | "critical"
+    details?: {
+      message?: string
+      name?: string
+    }
     errors?: { message?: string }[]
   } | null
 
@@ -344,6 +394,7 @@ async function parseArcaError(response: Response) {
   }
 
   return (
+    details?.details?.message ??
     details?.error ??
     details?.errors?.find((error) => Boolean(error.message))?.message ??
     response.statusText

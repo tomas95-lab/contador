@@ -89,6 +89,16 @@ export function formatCompactARS(value: number) {
   return `${sign}$${compactFormatter.format(Math.abs(value))}`
 }
 
+export function formatInvoiceAmount(invoice: GeneratedInvoice) {
+  if (invoice.currencyId === "DOL") {
+    return `USD ${numberFormatter.format(invoice.amount)} (${formatARS(
+      invoice.amountArs
+    )})`
+  }
+
+  return formatARS(invoice.amountArs)
+}
+
 export function formatPercent(value: number) {
   return `${Math.round(value * 100)}%`
 }
@@ -612,6 +622,9 @@ export function buildInvoiceDraft(
     client: payment.client,
     description: payment.description,
     amount: payment.amount,
+    currencyId: "PES",
+    exchangeRate: 1,
+    amountArs: payment.amount,
     cae: null,
     caeExpiresAt: null,
     status: "draft",

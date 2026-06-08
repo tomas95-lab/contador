@@ -11,7 +11,7 @@ export type AppSection =
 
 export type IncomeMethod = "Transferencia" | "Mercado Pago" | "Efectivo"
 
-export type InvoiceStatus = "facturado" | "pendiente"
+export type InvoiceStatus = "facturado" | "pendiente" | "emitiendo"
 
 export type GeneratedInvoiceStatus = "draft" | "issued"
 
@@ -51,6 +51,9 @@ export type GeneratedInvoice = {
   client: string
   description: string
   amount: number
+  currencyId: "DOL" | "PES" | string
+  exchangeRate: number
+  amountArs: number
   cae: string | null
   caeExpiresAt: string | null
   status: GeneratedInvoiceStatus

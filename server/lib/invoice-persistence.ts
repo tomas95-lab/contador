@@ -15,6 +15,9 @@ export type PersistedInvoiceRow = {
   client: string
   description: string
   amount: number
+  currency_id: string
+  exchange_rate: number
+  amount_ars: number
   cae: string
   cae_expires_at: string | null
   status: "issued"
@@ -52,20 +55,40 @@ export function buildPersistedInvoiceRow({
     ),
     description: result.invoice.description,
     amount: result.invoice.amount,
+    currency_id: getInvoiceCurrencyId(result),
+    exchange_rate: getInvoiceExchangeRate(result),
+    amount_ars: getInvoiceAmountArs(result),
     cae: result.cae,
     cae_expires_at: result.caeExpiresAt,
     status: "issued",
   }
 }
 
-export async function persistEmittedInvoice(row: PersistedInvoiceRow) {
-  const { data, error } = await getSupabaseAdmin()
-    .from("invoices")
-    .upsert(row, {
-      onConflict: "user_id,invoice_type,point_of_sale,number",
-    })
-    .select("*")
-    .single()
+export async function persistEmittedInvoice(
+  row: PersistedInvoiceRow,
+  { receiverCuit }: { receiverCuit?: string | null } = {}
+) {
+  const { data, error } = await getSupabaseAdmin().rpc(
+    "persist_emitted_invoice_and_mark_payment",
+    {
+      p_amount: row.amount,
+      p_amount_ars: row.amount_ars,
+      p_cae: row.cae,
+      p_cae_expires_at: row.cae_expires_at,
+      p_client: row.client,
+      p_currency_id: row.currency_id,
+      p_description: row.description,
+      p_exchange_rate: row.exchange_rate,
+      p_invoice_type: row.invoice_type,
+      p_issue_date: row.issue_date,
+      p_number: row.number,
+      p_payment_id: row.payment_id,
+      p_point_of_sale: row.point_of_sale,
+      p_receiver_cuit: receiverCuit ?? null,
+      p_status: row.status,
+      p_user_id: row.user_id,
+    }
+  )
 
   if (error) {
     throw new ArcaError(
@@ -108,6 +131,18 @@ function normalizeClientName(
   }
 
   return invoiceType === "E" ? "Cliente del exterior" : "Consumidor final"
+}
+
+function getInvoiceCurrencyId(result: EmittedArcaInvoice) {
+  return result.invoice.currencyId
+}
+
+function getInvoiceExchangeRate(result: EmittedArcaInvoice) {
+  return result.invoice.currencyRate
+}
+
+function getInvoiceAmountArs(result: EmittedArcaInvoice) {
+  return result.invoice.amountArs
 }
 
 function todayDate() {

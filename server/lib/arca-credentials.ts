@@ -1,10 +1,12 @@
 import { ArcaError } from "../arca/errors.js"
+import { config, type ArcaEnvironment } from "../config.js"
 import { getSupabaseAdmin, requiredEnv } from "./supabase-admin.js"
 
 const CREDENTIALS_CACHE_TTL_MS = 5 * 60 * 1000
 const ENCRYPTED_CREDENTIAL_PREFIX = "pgcrypto:v1:"
 
 type UserArcaCredentialsRow = {
+  arca_environment?: ArcaEnvironment
   user_id: string
   cuit: string
   certificate: string
@@ -14,6 +16,7 @@ type UserArcaCredentialsRow = {
 }
 
 export type UserArcaCredentials = {
+  arcaEnvironment: ArcaEnvironment
   userId: string
   cuit: string
   certificate: string
@@ -34,21 +37,39 @@ export function assertArcaEncryptionConfigured() {
 }
 
 export async function getUserArcaCredentials(
-  userId: string
+  userId: string,
+  environment: ArcaEnvironment = config.arca.environment
 ): Promise<UserArcaCredentials> {
-  const cached = credentialsCache.get(userId)
+  const cacheKey = getCredentialsCacheKey(userId, environment)
+  const cached = credentialsCache.get(cacheKey)
 
   if (cached && cached.expiresAt > Date.now()) {
     return cached.credentials
   }
 
-  const { data, error } = await getSupabaseAdmin()
+  let { data, error } = await getSupabaseAdmin()
     .from("user_arca_credentials")
     .select(
-      "user_id, cuit, certificate, private_key, wsfe_pto_vta, wsfex_pto_vta"
+      "arca_environment, user_id, cuit, certificate, private_key, wsfe_pto_vta, wsfex_pto_vta"
     )
     .eq("user_id", userId)
+    .eq("arca_environment", environment)
     .maybeSingle<UserArcaCredentialsRow>()
+
+  if (error && isMissingArcaEnvironmentColumn(error)) {
+    if (environment !== "production") {
+      throw missingCredentialsError(environment)
+    }
+
+    const legacyResult = await getSupabaseAdmin()
+      .from("user_arca_credentials")
+      .select("user_id, cuit, certificate, private_key, wsfe_pto_vta, wsfex_pto_vta")
+      .eq("user_id", userId)
+      .maybeSingle<UserArcaCredentialsRow>()
+
+    data = legacyResult.data
+    error = legacyResult.error
+  }
 
   if (error) {
     throw new ArcaError("No se pudieron leer las credenciales ARCA.", 500, {
@@ -58,7 +79,7 @@ export async function getUserArcaCredentials(
   }
 
   if (!data) {
-    throw new ArcaError("No tenés credenciales ARCA configuradas.", 403)
+    throw missingCredentialsError(environment)
   }
 
   const credentials = await mapCredentials(data)
@@ -69,7 +90,7 @@ export async function getUserArcaCredentials(
     await persistEncryptedCredentials(credentials)
   }
 
-  credentialsCache.set(userId, {
+  credentialsCache.set(cacheKey, {
     credentials,
     expiresAt: Date.now() + CREDENTIALS_CACHE_TTL_MS,
   })
@@ -77,18 +98,38 @@ export async function getUserArcaCredentials(
   return credentials
 }
 
-export async function hasUserArcaCredentials(userId: string) {
-  const cached = credentialsCache.get(userId)
+export async function hasUserArcaCredentials(
+  userId: string,
+  environment: ArcaEnvironment = config.arca.environment
+) {
+  const cacheKey = getCredentialsCacheKey(userId, environment)
+  const cached = credentialsCache.get(cacheKey)
 
   if (cached && cached.expiresAt > Date.now()) {
     return true
   }
 
-  const { data, error } = await getSupabaseAdmin()
+  let { data, error } = await getSupabaseAdmin()
     .from("user_arca_credentials")
     .select("user_id")
     .eq("user_id", userId)
+    .eq("arca_environment", environment)
     .maybeSingle<{ user_id: string }>()
+
+  if (error && isMissingArcaEnvironmentColumn(error)) {
+    if (environment !== "production") {
+      return false
+    }
+
+    const legacyResult = await getSupabaseAdmin()
+      .from("user_arca_credentials")
+      .select("user_id")
+      .eq("user_id", userId)
+      .maybeSingle<{ user_id: string }>()
+
+    data = legacyResult.data
+    error = legacyResult.error
+  }
 
   if (error) {
     throw new ArcaError("No se pudieron leer las credenciales ARCA.", 500, {
@@ -105,10 +146,13 @@ export async function saveUserArcaCredentials(
 ) {
   await persistEncryptedCredentials(credentials)
 
-  credentialsCache.set(credentials.userId, {
-    credentials,
-    expiresAt: Date.now() + CREDENTIALS_CACHE_TTL_MS,
-  })
+  credentialsCache.set(
+    getCredentialsCacheKey(credentials.userId, credentials.arcaEnvironment),
+    {
+      credentials,
+      expiresAt: Date.now() + CREDENTIALS_CACHE_TTL_MS,
+    }
+  )
 }
 
 async function persistEncryptedCredentials(credentials: UserArcaCredentials) {
@@ -121,6 +165,7 @@ async function persistEncryptedCredentials(credentials: UserArcaCredentials) {
     .upsert(
       {
         certificate,
+        arca_environment: credentials.arcaEnvironment,
         cuit: credentials.cuit,
         private_key: privateKey,
         updated_at: new Date().toISOString(),
@@ -128,10 +173,21 @@ async function persistEncryptedCredentials(credentials: UserArcaCredentials) {
         wsfe_pto_vta: credentials.wsfePointOfSale,
         wsfex_pto_vta: credentials.wsfexPointOfSale,
       },
-      { onConflict: "user_id" }
+      { onConflict: "user_id,arca_environment" }
     )
 
   if (error) {
+    if (isMissingArcaEnvironmentColumn(error)) {
+      throw new ArcaError(
+        "Falta aplicar la migración de credenciales ARCA por ambiente antes de guardar este certificado.",
+        500,
+        {
+          code: error.code,
+          message: error.message,
+        }
+      )
+    }
+
     throw new ArcaError("No se pudieron guardar las credenciales ARCA.", 500, {
       code: error.code,
       message: error.message,
@@ -148,6 +204,7 @@ async function mapCredentials(
   ])
 
   return {
+    arcaEnvironment: row.arca_environment ?? "production",
     userId: row.user_id,
     cuit: row.cuit.replace(/\D/g, ""),
     certificate: normalizePem(certificate),
@@ -217,4 +274,27 @@ function normalizePem(value: string) {
 
 function getArcaEncryptionKey() {
   return requiredEnv("ARCA_ENCRYPTION_KEY", process.env.ARCA_ENCRYPTION_KEY)
+}
+
+function getCredentialsCacheKey(userId: string, environment: ArcaEnvironment) {
+  return `${userId}:${environment}`
+}
+
+function formatArcaEnvironment(environment: ArcaEnvironment) {
+  return environment === "production" ? "producción" : "homologación"
+}
+
+function missingCredentialsError(environment: ArcaEnvironment) {
+  return new ArcaError(
+    `No tenés credenciales ARCA configuradas para ${formatArcaEnvironment(environment)}.`,
+    403
+  )
+}
+
+function isMissingArcaEnvironmentColumn(error: { code?: string; message?: string }) {
+  return (
+    error.code === "42703" ||
+    error.code === "PGRST204" ||
+    error.message?.includes("arca_environment") === true
+  )
 }

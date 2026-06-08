@@ -63,6 +63,9 @@ export type Database = {
           client: string
           description: string
           amount: number
+          currency_id: string
+          exchange_rate: number
+          amount_ars: number
           cae: string | null
           cae_expires_at: string | null
           status: string
@@ -79,6 +82,9 @@ export type Database = {
           client: string
           description: string
           amount: number
+          currency_id?: string
+          exchange_rate?: number
+          amount_ars?: number
           cae?: string | null
           cae_expires_at?: string | null
           status?: string
@@ -95,6 +101,9 @@ export type Database = {
           client?: string
           description?: string
           amount?: number
+          currency_id?: string
+          exchange_rate?: number
+          amount_ars?: number
           cae?: string | null
           cae_expires_at?: string | null
           status?: string
@@ -299,6 +308,7 @@ export type Database = {
         Row: {
           id: string
           user_id: string
+          arca_environment: "homologacion" | "production"
           cuit: string
           certificate: string
           private_key: string
@@ -310,6 +320,7 @@ export type Database = {
         Insert: {
           id?: string
           user_id: string
+          arca_environment?: "homologacion" | "production"
           cuit: string
           certificate: string
           private_key: string
@@ -321,6 +332,7 @@ export type Database = {
         Update: {
           id?: string
           user_id?: string
+          arca_environment?: "homologacion" | "production"
           cuit?: string
           certificate?: string
           private_key?: string

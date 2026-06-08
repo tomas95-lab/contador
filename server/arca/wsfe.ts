@@ -34,6 +34,9 @@ export interface EmittedWsfeInvoice {
     number: number
     date: string | null
     amount: number
+    currencyId: "PES"
+    currencyRate: 1
+    amountArs: number
     description: string
   }
   arca: unknown
@@ -103,7 +106,7 @@ function auth(credentials: UserArcaCredentials, token: string, sign: string) {
 function ensureNoWsfeErrors(result: unknown, operation: string): void {
   const errors = asArray(record(record(result).Errors).Err)
   if (errors.length > 0) {
-    throw new ArcaError("ARCA rechazó la operación.", 502, errors)
+    throw new ArcaError(`ARCA rechazó la operación ${operation}.`, 502, errors)
   }
 }
 
@@ -234,6 +237,9 @@ async function emitFacturaCOnce(
       number: Number(detailResponse.CbteDesde ?? invoiceNumber),
       date: fromArcaDate(String(detailResponse.CbteFch ?? today)),
       amount,
+      currencyId: "PES",
+      currencyRate: 1,
+      amountArs: amount,
       description: input.description,
     },
     arca: {

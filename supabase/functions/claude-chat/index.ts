@@ -109,9 +109,11 @@ class UnauthorizedError extends Error {
   }
 }
 
-const allowedOrigins = parseAllowedOrigins(
-  Deno.env.get("ALLOWED_ORIGIN") ?? "http://localhost:5173"
-)
+const localDevelopmentOrigins = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+]
+const allowedOrigins = parseAllowedOrigins(Deno.env.get("ALLOWED_ORIGIN") ?? "")
 let jwksPromise: Promise<JwksResponse> | null = null
 
 const baseCorsHeaders = {
@@ -311,7 +313,7 @@ function parseAllowedOrigins(value: string) {
     .map((origin) => origin.trim().replace(/\/+$/, ""))
     .filter(Boolean)
 
-  return new Set(origins.length > 0 ? origins : ["http://localhost:5173"])
+  return new Set([...origins, ...localDevelopmentOrigins])
 }
 
 async function authenticateRequest(request: Request): Promise<AuthContext> {

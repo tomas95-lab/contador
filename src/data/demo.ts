@@ -92,6 +92,9 @@ export function createDemoInvoices(payments: IncomePayment[]): GeneratedInvoice[
         client: payment.client,
         description: payment.description,
         amount: payment.amount,
+        currencyId: "PES",
+        exchangeRate: 1,
+        amountArs: payment.amount,
         cae,
         caeExpiresAt: addDaysToIsoDate(payment.date, 10),
         status: "issued",
@@ -116,6 +119,9 @@ export function createDemoInvoiceFromPayment(
     client: payment.client,
     description: payment.description,
     amount: payment.amount,
+    currencyId: "PES",
+    exchangeRate: 1,
+    amountArs: payment.amount,
     cae,
     caeExpiresAt: addDaysToIsoDate(payment.date, 10),
     status: "issued",
@@ -127,7 +133,10 @@ export function createDemoArcaAnnualSummary(
   year: number
 ): ArcaAnnualSummary {
   const facturaC = invoices.filter((invoice) => invoice.invoiceType === "Factura C")
-  const total = invoices.reduce((sum, invoice) => sum + invoice.amount, 0)
+  const total = invoices.reduce(
+    (sum, invoice) => sum + invoice.amountArs,
+    0
+  )
 
   return {
     year,
@@ -142,7 +151,7 @@ export function createDemoArcaAnnualSummary(
         invoiceTypeCode: 11,
         pointOfSale: 5,
         year,
-        total: facturaC.reduce((sum, invoice) => sum + invoice.amount, 0),
+        total: facturaC.reduce((sum, invoice) => sum + invoice.amountArs, 0),
         count: facturaC.length,
         lastAuthorizedNumber: facturaC.length,
         queried: facturaC.length,

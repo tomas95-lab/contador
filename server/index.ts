@@ -22,15 +22,14 @@ import {
 import {
   emitInvoice,
   getAnnualArcaSummary,
+  getArcaDestinationCountries,
   getArcaPointOfSales,
   getHistoricalArcaInvoices,
 } from "./routes/invoices.js"
 
-declare global {
-  namespace Express {
-    interface Request {
-      userId?: string
-    }
+declare module "express-serve-static-core" {
+  interface Request {
+    userId?: string
   }
 }
 
@@ -134,6 +133,11 @@ app.get(
   "/api/invoices/arca/points-of-sale",
   arcaQueryRateLimit,
   getArcaPointOfSales
+)
+app.get(
+  "/api/invoices/arca/destination-countries",
+  arcaQueryRateLimit,
+  getArcaDestinationCountries
 )
 
 async function authenticateJwt(
@@ -264,6 +268,18 @@ app.use((error: unknown, _req: Request, res: Response, next: NextFunction) => {
   res.status(500).json({
     error:
       "Ocurrió un error inesperado. Intentá de nuevo o contactá soporte desde Ayuda.",
+    ...(process.env.NODE_ENV !== "production"
+      ? {
+          details:
+            error instanceof Error
+              ? {
+                  message: error.message,
+                  name: error.name,
+                  stack: error.stack,
+                }
+              : error,
+        }
+      : {}),
   })
 })
 
