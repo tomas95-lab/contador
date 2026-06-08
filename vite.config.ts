@@ -20,7 +20,7 @@ export default defineConfig({
         short_name: "Contable",
         description: "Radar fiscal para monotributistas argentinos",
         display: "standalone",
-        start_url: "/",
+        start_url: "/app",
         scope: "/",
         lang: "es-AR",
         theme_color: "#0C447C",
