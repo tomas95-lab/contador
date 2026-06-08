@@ -116,6 +116,26 @@ export function SettingsView({
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
+            <p className="text-xs leading-5 text-muted-foreground">
+              Tus certificados quedan guardados de forma cifrada y los usamos
+              únicamente para consultar y emitir tus comprobantes ante ARCA.
+              Nunca compartimos ni guardamos tu clave fiscal.
+            </p>
+
+            {arcaStatus === "error" ? (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
+                <p className="text-sm font-medium">
+                  No pudimos verificar tu conexión con ARCA
+                </p>
+                <p className="mt-1 text-xs leading-5 text-amber-900/80 dark:text-amber-100/80">
+                  Esto puede pasar si tu certificado venció o si ARCA pidió
+                  reconfirmar la relación con Contable. Tocá "Reconectar ARCA"
+                  para revisar y renovar tu conexión; tus datos ya cargados no
+                  se pierden.
+                </p>
+              </div>
+            ) : null}
+
             {showEnvironmentCheck ? (
               <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sky-950 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-100">
                 <div className="flex items-start gap-3">

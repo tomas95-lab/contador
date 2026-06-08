@@ -672,7 +672,7 @@ export default function App() {
   async function generateInvoice(
     payment: IncomePayment,
     options: InvoiceEmissionOptions = {}
-  ) {
+  ): Promise<GeneratedInvoice | undefined> {
     if (isIssuingInvoiceRef.current) {
       throw new Error("Ya hay una factura en emisión. Esperá a que termine.")
     }
@@ -711,7 +711,7 @@ export default function App() {
               : item
           )
         )
-        return
+        return issuedInvoice
       }
 
       try {
@@ -775,7 +775,13 @@ export default function App() {
           setInvoices(remoteInvoices)
           setPayments(remotePayments)
           setDataStatus("connected")
-          return
+          return (
+            remoteInvoices.find(
+              (invoice) =>
+                invoice.cae === issuedInvoice.cae &&
+                invoice.number === issuedInvoice.number
+            ) ?? { ...issuedInvoice, id: crypto.randomUUID() }
+          )
         } catch (error) {
           console.error(error)
           setDataStatus("error")
@@ -787,13 +793,12 @@ export default function App() {
         }
       }
 
-      setInvoices((current) => [
-        {
-          ...issuedInvoice,
-          id: crypto.randomUUID(),
-        },
-        ...current,
-      ])
+      const savedInvoice: GeneratedInvoice = {
+        ...issuedInvoice,
+        id: crypto.randomUUID(),
+      }
+
+      setInvoices((current) => [savedInvoice, ...current])
       setPayments((current) =>
         current.map((item) =>
           item.id === payment.id
@@ -804,6 +809,8 @@ export default function App() {
             : item
         )
       )
+
+      return savedInvoice
     } finally {
       isIssuingInvoiceRef.current = false
       setIsIssuingInvoice(false)

@@ -1,5 +1,6 @@
 import * as React from "react"
 import {
+  CheckCircle2Icon,
   ClockIcon,
   DownloadIcon,
   FileCheck2Icon,
@@ -20,6 +21,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -49,6 +58,11 @@ import {
   saveForeignClient,
   type ForeignClient,
 } from "@/lib/foreign-clients-api"
+import {
+  InvoiceSummaryDetails,
+  SummaryRow,
+  type InvoiceSummary,
+} from "@/components/accounting/invoice-confirmation-summary"
 import type {
   GeneratedInvoice,
   IncomePayment,
@@ -80,14 +94,14 @@ type InvoicingPanelProps = {
       foreignClientPlatform?: string
       receiverIvaConditionId?: number
     }
-  ) => Promise<void>
+  ) => Promise<GeneratedInvoice | undefined>
   payments: IncomePayment[]
 }
 
 type InvoiceConfirmation = {
-  description: string
   invoiceType: "C" | "E"
   payment: IncomePayment
+  summary: InvoiceSummary
 }
 
 type CountryOption = {
@@ -195,6 +209,16 @@ export function InvoicingPanel({
   >({})
   const [invoiceConfirmation, setInvoiceConfirmation] =
     React.useState<InvoiceConfirmation | null>(null)
+  const [issuedInvoiceResult, setIssuedInvoiceResult] =
+    React.useState<GeneratedInvoice | null>(null)
+  const [invoiceListTypeFilter, setInvoiceListTypeFilter] = React.useState<
+    "all" | "C" | "E"
+  >("all")
+  const [invoiceListStatusFilter, setInvoiceListStatusFilter] = React.useState<
+    "all" | "issued" | "draft"
+  >("all")
+  const [invoiceListClientFilter, setInvoiceListClientFilter] =
+    React.useState("")
   const pendingPayments = payments.filter(
     (payment) => payment.invoiceStatus === "pendiente"
   )
@@ -205,6 +229,35 @@ export function InvoicingPanel({
     (payment) => payment.invoiceStatus === "facturado"
   )
   const sortedInvoices = sortInvoicesByDate(invoices)
+  const normalizedClientFilter = invoiceListClientFilter.trim().toLowerCase()
+  const filteredInvoices = sortedInvoices.filter((invoice) => {
+    if (
+      invoiceListTypeFilter !== "all" &&
+      invoice.invoiceType !== `Factura ${invoiceListTypeFilter}`
+    ) {
+      return false
+    }
+
+    if (
+      invoiceListStatusFilter !== "all" &&
+      invoice.status !== invoiceListStatusFilter
+    ) {
+      return false
+    }
+
+    if (
+      normalizedClientFilter &&
+      !invoice.client.toLowerCase().includes(normalizedClientFilter)
+    ) {
+      return false
+    }
+
+    return true
+  })
+  const hasInvoiceListFilters =
+    invoiceListTypeFilter !== "all" ||
+    invoiceListStatusFilter !== "all" ||
+    normalizedClientFilter.length > 0
   const currentYear = new Date().getFullYear()
   const metrics = getFinancialMetrics(payments, category)
   const isInvoiceEmissionLocked = isIssuingInvoice || Boolean(issuingPaymentId)
@@ -311,21 +364,20 @@ export function InvoicingPanel({
     const ivaCondition = ivaConditionOptions.find(
       (option) => Number(option.value) === ivaConditionId
     )
-    let description = ""
+    let summary: InvoiceSummary
+    const environment = formatArcaEnvironmentForText(arcaEnvironment, isDemo)
 
     if (invoiceType === "C") {
-      const receiver = clientCuit
-        ? `CUIT receptor ${clientCuit}, ${
-            ivaCondition?.label ?? "IVA receptor"
-          }`
-        : "consumidor final"
-
-      description = `¿Estás seguro que querés emitir la Factura C en ${formatArcaEnvironmentForText(
-        arcaEnvironment,
-        isDemo
-      )} por ${formatARS(
-        payment.amount
-      )} para ${payment.client} (${receiver})?`
+      summary = {
+        amount: formatARS(payment.amount),
+        client: payment.client,
+        currency: "Pesos argentinos (ARS)",
+        description: payment.description,
+        environment,
+        receiver: clientCuit
+          ? `CUIT ${clientCuit} · ${ivaCondition?.label ?? "IVA receptor"}`
+          : "Consumidor final (sin CUIT)",
+      }
     } else {
       const validationError = validateExportInvoice(payment)
 
@@ -338,23 +390,34 @@ export function InvoicingPanel({
       const invoiceAmount = getExportInvoiceAmount(payment)
       const exchangeRate = getExchangeRate(payment.id)
       const amountArs = getExportAmountArs(payment)
+      const countryLabel = foreignCountryOptions.find(
+        (country) => country.value === foreignClientCountryCodes[payment.id]
+      )?.label
 
-      description = `¿Estás seguro que querés emitir la Factura E en ${formatArcaEnvironmentForText(
-        arcaEnvironment,
-        isDemo
-      )} por ${
-        currencyId === "DOL"
-          ? `USD ${formatNumber(invoiceAmount)} (${formatARS(amountArs)})`
-          : formatARS(payment.amount)
-      } para ${foreignClientNames[payment.id]?.trim()}? Tipo de cambio: ${
-        currencyId === "DOL" ? exchangeRate : 1
-      }.`
+      summary = {
+        amount:
+          currencyId === "DOL"
+            ? `USD ${formatNumber(invoiceAmount)} (≈ ${formatARS(amountArs)} al tipo de cambio ${formatNumber(
+                exchangeRate
+              )})`
+            : formatARS(payment.amount),
+        client: foreignClientNames[payment.id]?.trim() || payment.client,
+        currency:
+          currencyId === "DOL"
+            ? "Dólares estadounidenses (USD)"
+            : "Pesos argentinos (ARS)",
+        description: payment.description,
+        environment,
+        receiver: countryLabel
+          ? `Cliente del exterior · ${countryLabel}`
+          : "Cliente del exterior",
+      }
     }
 
     setInvoiceConfirmation({
-      description,
       invoiceType,
       payment,
+      summary,
     })
   }
 
@@ -385,12 +448,13 @@ export function InvoicingPanel({
 
     try {
       if (invoiceType === "C") {
-        await onGenerateInvoice(payment, {
+        const issued = await onGenerateInvoice(payment, {
           clientCuit: clientCuit || undefined,
           invoiceType,
           receiverIvaConditionId: ivaConditionId,
         })
         clearDomesticInvoiceState(payment.id)
+        setIssuedInvoiceResult(issued ?? null)
       } else {
         const currencyId = getExportCurrencyId(payment.id)
         const invoiceAmount = getExportInvoiceAmount(payment)
@@ -404,7 +468,7 @@ export function InvoicingPanel({
         const foreignClientPlatform =
           foreignClientPlatforms[payment.id]?.trim() || undefined
 
-        await onGenerateInvoice(payment, {
+        const issued = await onGenerateInvoice(payment, {
           amount: invoiceAmount,
           currencyId,
           exchangeRate,
@@ -415,6 +479,7 @@ export function InvoicingPanel({
           foreignClientTaxId,
           invoiceType,
         })
+        setIssuedInvoiceResult(issued ?? null)
 
         if (saveClientByPayment[payment.id]) {
           try {
@@ -671,6 +736,11 @@ export function InvoicingPanel({
                         </SelectContent>
                       </Select>
                     </div>
+                    <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                      {(invoiceTypes[payment.id] ?? "C") === "E"
+                        ? "Factura E: usala cuando le facturás a una persona o empresa del exterior (por ejemplo, tu empleador o cliente fuera de Argentina)."
+                        : "Factura C: usala cuando le facturás a alguien dentro de Argentina (con o sin CUIT). Si tu cliente está en el exterior, cambiá a Factura E."}
+                    </p>
                     {(invoiceTypes[payment.id] ?? "C") === "E" ? (
                       <ExportInvoiceFields
                         amountArs={getExportAmountArs(payment)}
@@ -789,9 +859,75 @@ export function InvoicingPanel({
           </CardHeader>
           <CardContent>
             {sortedInvoices.length > 0 ? (
+              <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                <Input
+                  aria-label="Buscar por cliente"
+                  className="h-9 sm:max-w-[220px]"
+                  onChange={(event) =>
+                    setInvoiceListClientFilter(event.target.value)
+                  }
+                  placeholder="Buscar por cliente"
+                  value={invoiceListClientFilter}
+                />
+                <Select
+                  onValueChange={(value) =>
+                    setInvoiceListTypeFilter(value as "all" | "C" | "E")
+                  }
+                  value={invoiceListTypeFilter}
+                >
+                  <SelectTrigger
+                    aria-label="Filtrar por tipo de factura"
+                    className="h-9 w-full sm:w-44"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos los tipos</SelectItem>
+                    <SelectItem value="C">Factura C</SelectItem>
+                    <SelectItem value="E">Factura E</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select
+                  onValueChange={(value) =>
+                    setInvoiceListStatusFilter(
+                      value as "all" | "issued" | "draft"
+                    )
+                  }
+                  value={invoiceListStatusFilter}
+                >
+                  <SelectTrigger
+                    aria-label="Filtrar por estado"
+                    className="h-9 w-full sm:w-44"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos los estados</SelectItem>
+                    <SelectItem value="issued">Emitida</SelectItem>
+                    <SelectItem value="draft">Sin emitir</SelectItem>
+                  </SelectContent>
+                </Select>
+                {hasInvoiceListFilters ? (
+                  <Button
+                    onClick={() => {
+                      setInvoiceListClientFilter("")
+                      setInvoiceListTypeFilter("all")
+                      setInvoiceListStatusFilter("all")
+                    }}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    Limpiar filtros
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+            {sortedInvoices.length > 0 ? (
+              filteredInvoices.length > 0 ? (
               <div className="overflow-hidden rounded-lg border">
                 <div className="divide-y">
-                  {sortedInvoices.map((invoice) => (
+                  {filteredInvoices.map((invoice) => (
                     <div
                       key={invoice.id}
                       className="grid gap-3 p-3 md:grid-cols-[1fr_auto_auto] md:items-center"
@@ -826,6 +962,11 @@ export function InvoicingPanel({
                   ))}
                 </div>
               </div>
+              ) : (
+                <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                  Ningún comprobante coincide con esos filtros.
+                </div>
+              )
             ) : (
               <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
                 Todavía no emitiste facturas desde la app.
@@ -919,11 +1060,13 @@ export function InvoicingPanel({
         </CardContent>
       </Card>
       <ConfirmationDialog
-        actionLabel="Confirmar"
-        description={
-          invoiceConfirmation?.description ??
-          "¿Estás seguro que querés emitir esta factura?"
+        actionLabel="Sí, emitir factura"
+        content={
+          invoiceConfirmation ? (
+            <InvoiceSummaryDetails summary={invoiceConfirmation.summary} />
+          ) : null
         }
+        description="Esta acción emite una factura real ante ARCA y genera un CAE (código de autorización electrónico). Una vez emitida, no se puede deshacer ni editar."
         disabled={isInvoiceEmissionLocked}
         onConfirm={() => void confirmGenerateInvoice()}
         onOpenChange={(open) => {
@@ -935,10 +1078,82 @@ export function InvoicingPanel({
         severity="default"
         title={
           invoiceConfirmation?.invoiceType === "E"
-            ? "Emitir Factura E"
-            : "Emitir Factura C"
+            ? "Confirmar emisión de Factura E"
+            : "Confirmar emisión de Factura C"
         }
       />
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open) {
+            setIssuedInvoiceResult(null)
+          }
+        }}
+        open={Boolean(issuedInvoiceResult)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              <CheckCircle2Icon className="size-5 text-emerald-600" />
+              <DialogTitle>Factura emitida con éxito</DialogTitle>
+            </div>
+            <DialogDescription>
+              ARCA autorizó tu factura y le asignó un CAE. Guardá este
+              comprobante para tus registros.
+            </DialogDescription>
+          </DialogHeader>
+          {issuedInvoiceResult ? (
+            <div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-sm">
+              <SummaryRow
+                label="Tipo"
+                value={issuedInvoiceResult.invoiceType}
+              />
+              <SummaryRow
+                label="Número"
+                value={`Punto de venta ${String(
+                  issuedInvoiceResult.pointOfSale
+                ).padStart(4, "0")} · Comprobante ${String(
+                  issuedInvoiceResult.number
+                ).padStart(8, "0")}`}
+              />
+              <SummaryRow
+                label="Fecha de emisión"
+                value={formatPaymentDate(issuedInvoiceResult.issueDate)}
+              />
+              <SummaryRow
+                label="CAE"
+                value={issuedInvoiceResult.cae ?? "Pendiente de autorización"}
+              />
+              {issuedInvoiceResult.caeExpiresAt ? (
+                <SummaryRow
+                  label="Vencimiento del CAE"
+                  value={formatPaymentDate(issuedInvoiceResult.caeExpiresAt)}
+                />
+              ) : null}
+            </div>
+          ) : null}
+          <DialogFooter className="sm:justify-between">
+            <Button
+              onClick={() => setIssuedInvoiceResult(null)}
+              type="button"
+              variant="outline"
+            >
+              Cerrar
+            </Button>
+            <Button
+              disabled={!issuedInvoiceResult}
+              onClick={() => {
+                if (issuedInvoiceResult) {
+                  downloadInvoiceHtml(issuedInvoiceResult)
+                }
+              }}
+              type="button"
+            >
+              <DownloadIcon />
+              Descargar comprobante
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -1105,6 +1320,12 @@ function ExportInvoiceFields({
             onChange={(event) => onClientNameChange(event.target.value)}
             value={clientName}
           />
+          <p className="text-xs leading-5 text-muted-foreground">
+            Es quien te contrata o te paga el trabajo (por ejemplo, tu
+            empleador o el cliente del exterior), no la plataforma de cobro
+            (Airtm, BBVA, Deel, Payoneer, Wise, etc.). Esa plataforma va abajo,
+            en "Plataforma de cobro".
+          </p>
         </div>
         <div className="space-y-1">
           <Label>País destino</Label>
@@ -1235,7 +1456,7 @@ function ExportInvoiceFields({
   )
 }
 
-function downloadInvoiceHtml(invoice: GeneratedInvoice) {
+export function downloadInvoiceHtml(invoice: GeneratedInvoice) {
   const html = buildInvoiceHtml(invoice)
   const blob = new Blob([html], {
     type: "text/html;charset=utf-8",

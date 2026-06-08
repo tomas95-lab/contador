@@ -727,8 +727,9 @@ export function ArcaOnboarding({
               <ShieldCheckIcon className="size-4" />
               <AlertDescription>
                 <strong>Tu clave fiscal no se guarda nunca.</strong> La app solo
-                guarda la conexión técnica para facturar. Tu clave fiscal queda
-                siempre dentro de ARCA.
+                guarda, de forma cifrada, la conexión técnica (certificado y
+                clave privada) que necesita para consultar y emitir tus
+                comprobantes. Tu clave fiscal queda siempre dentro de ARCA.
               </AlertDescription>
             </Alert>
           </section>

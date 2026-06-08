@@ -2,6 +2,8 @@
 
 import * as React from "react"
 import {
+  CheckCircle2Icon,
+  DownloadIcon,
   FilePlus2Icon,
   PlugZapIcon,
   ReceiptTextIcon,
@@ -13,6 +15,12 @@ import {
 
 import { ConfirmationDialog } from "@/components/confirmation-dialog"
 import { FiscalProfileCard } from "@/components/accounting/fiscal-profile-card"
+import { downloadInvoiceHtml } from "@/components/accounting/invoicing-panel"
+import {
+  InvoiceSummaryDetails,
+  SummaryRow,
+  type InvoiceSummary,
+} from "@/components/accounting/invoice-confirmation-summary"
 import { MessageMarkdown } from "@/components/accounting/message-markdown"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -24,6 +32,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -50,6 +66,7 @@ import {
 import { cn } from "@/lib/utils"
 import type {
   AssistantMessage,
+  GeneratedInvoice,
   IncomePayment,
   TaxCategory,
   UserFiscalProfile,
@@ -81,7 +98,7 @@ type AssistantPanelProps = {
       destinationCountryCode?: number
       receiverIvaConditionId?: number
     }
-  ) => Promise<void>
+  ) => Promise<GeneratedInvoice | undefined>
   onSaveProfile: (profile: UserFiscalProfile) => Promise<void>
 }
 
@@ -95,6 +112,7 @@ type InvoiceConfirmation = {
   invoiceType: "C" | "E"
   payment: IncomePayment
   receiver: string
+  summary: InvoiceSummary
 }
 
 const ivaConditionOptions = [
@@ -140,6 +158,8 @@ export function AssistantPanel({
     React.useState<PendingInvoiceDraft | null>(null)
   const [invoiceConfirmation, setInvoiceConfirmation] =
     React.useState<InvoiceConfirmation | null>(null)
+  const [issuedInvoiceResult, setIssuedInvoiceResult] =
+    React.useState<GeneratedInvoice | null>(null)
   const [isClearing, setIsClearing] = React.useState(false)
   const [isQueryingArca, setIsQueryingArca] = React.useState(false)
   const [isPending, setIsPending] = React.useState(false)
@@ -396,10 +416,29 @@ export function AssistantPanel({
         ? `cliente exterior ${exportClientName}`
         : "consumidor final"
 
+    const summary: InvoiceSummary = {
+      amount: formatPreparedInvoiceAmount(
+        invoiceType,
+        latestPayment.amount,
+        invoiceCurrencyId,
+        invoiceAmount,
+        invoiceExchangeRate
+      ),
+      client: latestPayment.client,
+      currency:
+        invoiceType === "E" && invoiceCurrencyId === "DOL"
+          ? "Dólares estadounidenses (USD)"
+          : "Pesos argentinos (ARS)",
+      description: latestPayment.description,
+      environment: formatArcaEnvironmentForText(arcaEnvironment, isDemo),
+      receiver,
+    }
+
     setInvoiceConfirmation({
       invoiceType,
       payment: latestPayment,
       receiver,
+      summary,
     })
   }
 
@@ -437,7 +476,7 @@ export function AssistantPanel({
     setInvoiceError("")
 
     try {
-      await onGenerateInvoice(latestPayment, {
+      const issued = await onGenerateInvoice(latestPayment, {
         invoiceType,
         amount:
           invoiceType === "E" && invoiceCurrencyId === "DOL"
@@ -458,6 +497,7 @@ export function AssistantPanel({
           ? Number(invoiceIvaCondition)
           : undefined,
       })
+      setIssuedInvoiceResult(issued ?? null)
       await onAddMessage({
         role: "assistant",
         content: `Listo: emití la Factura ${invoiceType} de **${latestPayment.client}** por **${formatPreparedInvoiceAmount(
@@ -466,7 +506,7 @@ export function AssistantPanel({
           invoiceCurrencyId,
           invoiceAmount,
           invoiceExchangeRate
-        )}** y la guardé en la app.`,
+        )}**${issued?.cae ? ` (CAE ${issued.cae})` : ""} y la guardé en la app.`,
       })
       setPendingInvoiceDraft(null)
       setInvoiceClientAddress("")
@@ -668,25 +708,13 @@ export function AssistantPanel({
         </CardFooter>
       </Card>
       <ConfirmationDialog
-        actionLabel="Confirmar"
-        description={
-          invoiceConfirmation
-            ? `¿Estás seguro que querés emitir la Factura ${
-                invoiceConfirmation.invoiceType
-              } en ${formatArcaEnvironmentForText(
-                arcaEnvironment,
-                isDemo
-              )} por ${formatPreparedInvoiceAmount(
-                invoiceConfirmation.invoiceType,
-                invoiceConfirmation.payment.amount,
-                invoiceCurrencyId,
-                invoiceAmount,
-                invoiceExchangeRate
-              )} para ${invoiceConfirmation.payment.client} (${
-                invoiceConfirmation.receiver
-              })?`
-            : "¿Estás seguro que querés emitir esta factura?"
+        actionLabel="Sí, emitir factura"
+        content={
+          invoiceConfirmation ? (
+            <InvoiceSummaryDetails summary={invoiceConfirmation.summary} />
+          ) : null
         }
+        description="Esta acción emite una factura real ante ARCA y genera un CAE (código de autorización electrónico). Una vez emitida, no se puede deshacer ni editar."
         disabled={isIssuingInvoice}
         onConfirm={() => void confirmEmitPreparedInvoice()}
         onOpenChange={(open) => {
@@ -696,8 +724,84 @@ export function AssistantPanel({
         }}
         open={Boolean(invoiceConfirmation)}
         severity="default"
-        title="Emitir factura en ARCA"
+        title={
+          invoiceConfirmation?.invoiceType === "E"
+            ? "Confirmar emisión de Factura E"
+            : "Confirmar emisión de Factura C"
+        }
       />
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open) {
+            setIssuedInvoiceResult(null)
+          }
+        }}
+        open={Boolean(issuedInvoiceResult)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              <CheckCircle2Icon className="size-5 text-emerald-600" />
+              <DialogTitle>Factura emitida con éxito</DialogTitle>
+            </div>
+            <DialogDescription>
+              ARCA autorizó tu factura y le asignó un CAE. Guardá este
+              comprobante para tus registros.
+            </DialogDescription>
+          </DialogHeader>
+          {issuedInvoiceResult ? (
+            <div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-sm">
+              <SummaryRow
+                label="Tipo"
+                value={issuedInvoiceResult.invoiceType}
+              />
+              <SummaryRow
+                label="Número"
+                value={`Punto de venta ${String(
+                  issuedInvoiceResult.pointOfSale
+                ).padStart(4, "0")} · Comprobante ${String(
+                  issuedInvoiceResult.number
+                ).padStart(8, "0")}`}
+              />
+              <SummaryRow
+                label="Fecha de emisión"
+                value={formatPaymentDate(issuedInvoiceResult.issueDate)}
+              />
+              <SummaryRow
+                label="CAE"
+                value={issuedInvoiceResult.cae ?? "Pendiente de autorización"}
+              />
+              {issuedInvoiceResult.caeExpiresAt ? (
+                <SummaryRow
+                  label="Vencimiento del CAE"
+                  value={formatPaymentDate(issuedInvoiceResult.caeExpiresAt)}
+                />
+              ) : null}
+            </div>
+          ) : null}
+          <DialogFooter className="sm:justify-between">
+            <Button
+              onClick={() => setIssuedInvoiceResult(null)}
+              type="button"
+              variant="outline"
+            >
+              Cerrar
+            </Button>
+            <Button
+              disabled={!issuedInvoiceResult}
+              onClick={() => {
+                if (issuedInvoiceResult) {
+                  downloadInvoiceHtml(issuedInvoiceResult)
+                }
+              }}
+              type="button"
+            >
+              <DownloadIcon />
+              Descargar comprobante
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

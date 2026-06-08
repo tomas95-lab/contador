@@ -1,3 +1,5 @@
+import type { ReactNode } from "react"
+
 import { Button } from "@/components/ui/button"
 import {
   AlertDialog,
@@ -15,6 +17,7 @@ type ConfirmationSeverity = "destructive" | "primary" | "default"
 type ConfirmationDialogProps = {
   actionLabel?: string
   cancelLabel?: string
+  content?: ReactNode
   description: string
   disabled?: boolean
   onConfirm: () => void
@@ -36,6 +39,7 @@ const actionClassName: Record<ConfirmationSeverity, string> = {
 export function ConfirmationDialog({
   actionLabel = "Confirmar",
   cancelLabel = "Cancelar",
+  content,
   description,
   disabled = false,
   onConfirm,
@@ -51,6 +55,7 @@ export function ConfirmationDialog({
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
+        {content ? <div className="-mt-2">{content}</div> : null}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={disabled}>
             {cancelLabel}
