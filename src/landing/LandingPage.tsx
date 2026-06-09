@@ -11,7 +11,10 @@ import { Pricing } from "@/landing/components/Pricing"
 import { Problem } from "@/landing/components/Problem"
 import { Trust } from "@/landing/components/Trust"
 import { WaitlistModal } from "@/landing/components/WaitlistModal"
-import { trackLandingEvent } from "@/lib/landing-tracking"
+import {
+  getLandingTrackingIds,
+  trackLandingEvent,
+} from "@/lib/landing-tracking"
 
 export default function LandingPage() {
   const [isWaitlistOpen, setIsWaitlistOpen] = React.useState(false)
@@ -45,7 +48,9 @@ export default function LandingPage() {
 
     sections.forEach((section) => sectionObserver.observe(section))
 
+    const { sessionId } = getLandingTrackingIds()
     const scrollMilestones = [25, 50, 75, 100]
+    let lastReportedScrollDepth = 0
 
     function handleScrollDepth() {
       const scrollable =
@@ -53,16 +58,21 @@ export default function LandingPage() {
       const scrollDepth =
         scrollable > 0 ? Math.round((window.scrollY / scrollable) * 100) : 100
 
-      scrollMilestones.forEach((milestone) => {
-        if (scrollDepth < milestone) {
-          return
-        }
+      const reachedMilestone =
+        [...scrollMilestones].reverse().find((milestone) => {
+          return scrollDepth >= milestone
+        }) ?? 0
 
-        trackLandingEvent({
-          eventName: "scroll_depth",
-          source: `${milestone}%`,
-          oncePerSession: true,
-        })
+      if (reachedMilestone <= lastReportedScrollDepth) {
+        return
+      }
+
+      lastReportedScrollDepth = reachedMilestone
+      trackLandingEvent({
+        eventName: "scroll_depth",
+        source: "landing",
+        detail: `${reachedMilestone}%`,
+        eventId: `${sessionId}-scroll-depth`,
       })
     }
 

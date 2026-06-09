@@ -8,6 +8,7 @@ type LandingTrackingEvent = {
   eventName: string
   source: string
   detail?: string
+  eventId?: string
   oncePerSession?: boolean
 }
 
@@ -27,6 +28,7 @@ export function trackLandingEvent({
   eventName,
   source,
   detail = "",
+  eventId,
   oncePerSession = false,
 }: LandingTrackingEvent) {
   if (typeof window === "undefined") {
@@ -49,7 +51,7 @@ export function trackLandingEvent({
   void postToGoogleSheet({
     tabName: "trackeo",
     tipo: "trackeo",
-    event_id: createId(),
+    event_id: eventId ?? createId(),
     visitor_id: visitorId,
     session_id: sessionId,
     evento: eventName,
