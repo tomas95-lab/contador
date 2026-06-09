@@ -1,7 +1,7 @@
 import {
   AlertTriangle,
-  CircleDollarSign,
-  Compass,
+  BellOff,
+  FileSpreadsheet,
   HelpCircle,
 } from "lucide-react"
 
@@ -9,16 +9,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 const painPoints = [
   {
-    icon: CircleDollarSign,
-    text: "Pagás entre $30.000 y $60.000 por mes por algo automático",
+    icon: FileSpreadsheet,
+    text: "Una planilla solo sirve si te acordás de actualizarla",
   },
   {
-    icon: Compass,
-    text: "No sabés si estás cerca de pasarte de categoría",
+    icon: BellOff,
+    text: "ARCA muestra lo facturado, pero no te avisa qué puede pasar",
   },
   {
     icon: AlertTriangle,
-    text: "ARCA es un laberinto y nadie te avisa cuando algo está mal",
+    text: "Cuando cambia tu ritmo de ingresos, el riesgo puede aparecer tarde",
   },
 ]
 
@@ -29,15 +29,16 @@ export function Problem() {
         <div className="mx-auto max-w-4xl text-center">
           <div className="mb-6 inline-flex items-center rounded-full border border-[#FFA75D]/25 bg-[#FFA75D]/10 px-4 py-2 text-sm font-semibold text-[#B56518]">
             <HelpCircle className="mr-2 size-4" />
-            El problema de siempre
+            Para quienes trabajan por su cuenta
           </div>
           <h2 className="landing-text-balance text-4xl leading-tight font-black tracking-normal text-[#1F1F1F] md:text-6xl">
-            ¿Pagás contador solo para hacer{" "}
-            <span className="landing-text-gradient">facturas?</span>
+            No deberías vivir pendiente de{" "}
+            <span className="landing-text-gradient">ARCA.</span>
           </h2>
           <p className="mx-auto mt-5 max-w-3xl text-lg leading-8 text-[#6B6B6B] md:text-xl">
-            Contable no reemplaza criterio profesional cuando lo necesitás:
-            automatiza lo repetitivo y te avisa antes de que el problema llegue.
+            Contable organiza el monotributo de freelancers, profesionales
+            independientes y exportadores de servicios para que puedan
+            anticiparse sin revisar portales y planillas todo el tiempo.
           </p>
         </div>
 

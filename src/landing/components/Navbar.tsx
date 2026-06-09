@@ -10,8 +10,9 @@ type NavbarProps = {
 }
 
 const navLinks = [
-  { href: "#problema", label: "Problema" },
-  { href: "#features", label: "Producto" },
+  { href: "#comparacion", label: "Cómo funciona" },
+  { href: "#features", label: "Radar fiscal" },
+  { href: "#confianza", label: "Seguridad" },
   { href: "#pricing", label: "Planes" },
 ]
 
@@ -60,6 +61,9 @@ export function Navbar({ onOpenWaitlist }: NavbarProps) {
           {navLinks.map((link) => (
             <a
               className="relative rounded-xl px-4 py-2 text-sm font-medium text-[#475569] transition-all duration-200 hover:bg-white/70 hover:text-[#185FA5]"
+              data-track-detail={link.label}
+              data-track-event="navigation_click"
+              data-track-source="navbar_desktop"
               href={link.href}
               key={link.href}
             >
@@ -69,18 +73,14 @@ export function Navbar({ onOpenWaitlist }: NavbarProps) {
         </nav>
 
         <div className="hidden items-center gap-3 md:flex">
-          <Link
-            className="rounded-xl px-4 py-2 text-sm font-medium text-[#475569] transition-all duration-200 hover:bg-white/70 hover:text-[#185FA5]"
-            to="/app"
-          >
-            Ingresar
-          </Link>
           <Button
             className="landing-primary-gradient h-10 rounded-2xl px-5 text-white shadow-lg hover:opacity-95"
+            data-track-event="waitlist_open"
+            data-track-source="navbar_desktop"
             onClick={onOpenWaitlist}
           >
             <Clock className="size-4" />
-            Empezar gratis
+            Probar radar fiscal
           </Button>
         </div>
 
@@ -104,6 +104,9 @@ export function Navbar({ onOpenWaitlist }: NavbarProps) {
             {navLinks.map((link) => (
               <a
                 className="rounded-2xl px-4 py-3 text-sm font-semibold text-[#475569] transition-colors hover:bg-white/70 hover:text-[#185FA5]"
+                data-track-detail={link.label}
+                data-track-event="navigation_click"
+                data-track-source="navbar_mobile"
                 href={link.href}
                 key={link.href}
                 onClick={() => setIsMobileMenuOpen(false)}
@@ -111,21 +114,16 @@ export function Navbar({ onOpenWaitlist }: NavbarProps) {
                 {link.label}
               </a>
             ))}
-            <Link
-              className="rounded-2xl px-4 py-3 text-sm font-semibold text-[#475569] transition-colors hover:bg-white/70 hover:text-[#185FA5]"
-              onClick={() => setIsMobileMenuOpen(false)}
-              to="/app"
-            >
-              Ingresar
-            </Link>
             <Button
               className="landing-primary-gradient h-11 rounded-2xl text-white"
+              data-track-event="waitlist_open"
+              data-track-source="navbar_mobile"
               onClick={() => {
                 setIsMobileMenuOpen(false)
                 onOpenWaitlist()
               }}
             >
-              Empezar gratis
+              Probar radar fiscal
             </Button>
           </div>
         </div>

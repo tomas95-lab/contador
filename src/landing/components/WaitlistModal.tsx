@@ -10,14 +10,16 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { postToGoogleSheet } from "@/lib/google-sheets"
+import {
+  getLandingTrackingIds,
+  trackLandingEvent,
+} from "@/lib/landing-tracking"
 
 type WaitlistModalProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
 }
-
-const WAITLIST_ENDPOINT =
-  "https://script.google.com/macros/s/AKfycbw6PVhqM8U3Ng0j3csoKu138hftkTQOMZjsEzOk8YLAV4PPz6NTEOCvQ8mBiTkWqC4Q/exec"
 
 export function WaitlistModal({ open, onOpenChange }: WaitlistModalProps) {
   const [nombre, setNombre] = React.useState("")
@@ -32,22 +34,30 @@ export function WaitlistModal({ open, onOpenChange }: WaitlistModalProps) {
     setError("")
 
     try {
-      await fetch(WAITLIST_ENDPOINT, {
-        method: "POST",
-        mode: "no-cors",
-        body: JSON.stringify({
-          nombre,
-          email,
-          asunto: "Waitlist",
-          mensaje: "Registro desde landing",
-        }),
+      const { visitorId, sessionId } = getLandingTrackingIds()
+
+      await postToGoogleSheet({
+        nombre,
+        email,
+        asunto: "Waitlist",
+        mensaje: "Registro desde landing",
+        visitor_id: visitorId,
+        session_id: sessionId,
       })
 
+      trackLandingEvent({
+        eventName: "waitlist_submit",
+        source: "waitlist_modal",
+      })
       setNombre("")
       setEmail("")
       setSubmitted(true)
     } catch (submitError) {
       console.error(submitError)
+      trackLandingEvent({
+        eventName: "waitlist_error",
+        source: "waitlist_modal",
+      })
       setError("No pudimos registrarte. Intentá de nuevo en unos minutos.")
     } finally {
       setIsSubmitting(false)
@@ -68,7 +78,7 @@ export function WaitlistModal({ open, onOpenChange }: WaitlistModalProps) {
       <DialogContent className="border-[#DDE8FF] bg-white text-[#1F1F1F] shadow-xl">
         <DialogHeader>
           <DialogTitle className="text-2xl font-black">
-            Unite a la lista
+            Probá el radar fiscal
           </DialogTitle>
           <DialogDescription className="text-[#6B6B6B]">
             Te escribimos apenas abramos nuevos accesos a Contable.
@@ -106,12 +116,15 @@ export function WaitlistModal({ open, onOpenChange }: WaitlistModalProps) {
             </div>
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
             <Button
-              style={{ background: "linear-gradient(135deg, #185fa5 0%, #4f8cff 58%, #0ea5e9 100%)" }}
+              style={{
+                background:
+                  "linear-gradient(135deg, #185fa5 0%, #4f8cff 58%, #0ea5e9 100%)",
+              }}
               className="h-12 w-full rounded-2xl font-bold text-white hover:opacity-95"
               disabled={isSubmitting}
               type="submit"
             >
-              {isSubmitting ? "Enviando..." : "Unirme a la lista"}
+              {isSubmitting ? "Enviando..." : "Quiero probar Contable"}
             </Button>
           </form>
         )}

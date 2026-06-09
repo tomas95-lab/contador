@@ -1,4 +1,4 @@
-import { ArrowRight, Check, Clock, ShieldCheck, Star } from "lucide-react"
+import { ArrowRight, Check, Radar, ShieldCheck, Star } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -8,9 +8,9 @@ type HeroProps = {
 }
 
 const quickWins = [
-  "Facturas C y E con número de validación ARCA real",
-  "Radar antes de recategorizar",
-  "Conta IA disponible 24/7",
+  "Margen de categoría siempre visible",
+  "Proyección según tu ritmo de facturación",
+  "Alertas antes de que ARCA te sorprenda",
 ]
 
 export function Hero({ onOpenWaitlist }: HeroProps) {
@@ -18,6 +18,7 @@ export function Hero({ onOpenWaitlist }: HeroProps) {
     <section
       aria-labelledby="hero-title"
       className="landing-bg-pattern relative flex min-h-screen items-center justify-center overflow-hidden px-4 pt-28 pb-20 sm:px-6 lg:px-8"
+      id="inicio"
     >
       <div
         aria-hidden="true"
@@ -42,31 +43,31 @@ export function Hero({ onOpenWaitlist }: HeroProps) {
               className="h-8 rounded-full border-[#3CC68A]/25 bg-[#3CC68A]/10 px-4 text-sm text-[#2C8A62]"
               variant="outline"
             >
-              Hecho en Argentina 🇦🇷
+              Radar fiscal para monotributistas
             </Badge>
             <Badge
               className="h-8 rounded-full border-[#185FA5]/20 bg-[#185FA5]/10 px-4 text-sm text-[#185FA5]"
               variant="outline"
             >
               <ShieldCheck className="size-3" />
-              Sin compartir clave fiscal
+              No guardamos tu clave fiscal
             </Badge>
           </div>
 
           <h1
-            className="landing-fade-in-up landing-text-balance mt-8 text-4xl leading-[0.95] font-black tracking-normal text-[#1F1F1F] sm:text-6xl md:text-7xl lg:text-8xl"
+            className="landing-fade-in-up landing-text-balance mt-8 text-4xl leading-[1.02] font-black tracking-normal text-[#1F1F1F] sm:text-6xl md:text-7xl"
             id="hero-title"
             style={{ animationDelay: "0.08s" }}
           >
-            <span className="block sm:inline">Tu monotributo</span>
-            <span className="landing-text-gradient block">bajo control.</span>
+            Tu monotributo no debería depender de{" "}
+            <span className="landing-text-gradient">una planilla.</span>
           </h1>
           <p
             className="landing-fade-in-up landing-text-balance mx-auto mt-6 max-w-[23rem] text-xl leading-8 text-[#6B6B6B] sm:max-w-4xl md:text-2xl md:leading-10"
             style={{ animationDelay: "0.16s" }}
           >
-            Facturá, controlá tu categoría y recibí alertas antes de pasarte de
-            los límites de ARCA. Con Conta, tu contador IA disponible 24/7.
+            Contable te muestra cuánto margen te queda, proyecta cuándo podrías
+            pasarte de categoría y te avisa antes de que ARCA te sorprenda.
           </p>
 
           <div
@@ -94,12 +95,24 @@ export function Hero({ onOpenWaitlist }: HeroProps) {
           >
             <Button
               className="landing-primary-gradient landing-hover-lift h-14 rounded-2xl px-8 text-base font-bold text-white shadow-2xl hover:opacity-95"
+              data-track-event="waitlist_open"
+              data-track-source="hero"
               onClick={onOpenWaitlist}
               size="lg"
             >
-              <Clock className="size-5" />
-              Empezar gratis 30 días
+              <Radar className="size-5" />
+              Probar radar fiscal
               <ArrowRight className="size-4" />
+            </Button>
+            <Button
+              asChild
+              className="landing-hover-lift h-14 rounded-2xl border-2 border-[#185FA5]/20 bg-white/80 px-8 text-base font-bold text-[#185FA5] shadow-lg hover:bg-white"
+              data-track-event="navigation_click"
+              data-track-source="hero_how_it_works"
+              size="lg"
+              variant="outline"
+            >
+              <a href="#comparacion">Ver cómo funciona</a>
             </Button>
           </div>
 
@@ -109,15 +122,15 @@ export function Hero({ onOpenWaitlist }: HeroProps) {
           >
             <div className="flex items-center gap-2">
               <span className="size-2 rounded-full bg-[#3CC68A]" />
-              Sin tarjeta de crédito
+              Para freelancers y profesionales independientes
             </div>
             <div className="flex items-center gap-2">
               <span className="size-2 rounded-full bg-[#3CC68A]" />
-              Soporte AR
+              Facturas C y E
             </div>
             <div className="flex items-center gap-2">
               <span className="size-2 rounded-full bg-[#3CC68A]" />
-              Conectado a ARCA real
+              Conexión segura con ARCA
             </div>
           </div>
         </div>
@@ -181,7 +194,7 @@ function DashboardMockup() {
 
           <div className="mt-6 rounded-2xl border border-[#185FA5]/10 bg-[#F7F9FC] p-4">
             <p className="text-sm font-bold text-[#1F1F1F]">
-              Te faltan $1.240.000 antes del próximo límite.
+              Te quedan $1.240.000 de margen en tu categoría.
             </p>
             <p className="mt-1 text-xs leading-5 text-[#6B6B6B]">
               Si seguís a este ritmo, llegás tranquilo a la próxima
@@ -213,8 +226,8 @@ function DashboardMockup() {
             <div className="space-y-3">
               {[
                 "Recategorización: sin riesgo este mes",
-                "Factura E: tipo de cambio actualizado",
-                "ARCA: credenciales vigentes",
+                "Proyección: atención en los próximos 90 días",
+                "Factura E: lista para confirmar",
               ].map((item) => (
                 <div
                   className="flex items-center gap-3 rounded-2xl bg-[#F7F9FC] px-4 py-3 text-sm font-semibold text-[#475569]"

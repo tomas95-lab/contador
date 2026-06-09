@@ -20,10 +20,10 @@ const plans = [
     price: "$10.000 ARS/mes",
     badge: "Más popular",
     features: [
+      "Radar de categoría y margen disponible",
+      "Proyección y alertas de riesgo",
       "Facturación C conectada a ARCA",
-      "Radar de categoría con proyección",
-      "Alertas de riesgo fiscal",
-      "Conta, tu contador IA",
+      "Conta IA con tu contexto fiscal",
     ],
   },
   {
@@ -32,9 +32,9 @@ const plans = [
     badge: null,
     features: [
       "Todo lo del plan Simple",
-      "Factura E para cobros en USD",
+      "Factura E para exportar servicios",
       "Clientes extranjeros guardados",
-      "Tipo de cambio y equivalente ARS",
+      "Menos dependencia del portal ARCA",
     ],
   },
 ]
@@ -49,11 +49,12 @@ export function Pricing({ onOpenWaitlist }: PricingProps) {
             Precios de lanzamiento
           </div>
           <h2 className="landing-text-balance text-4xl leading-tight font-black tracking-normal text-[#1F1F1F] md:text-6xl">
-            Más barato que un contador.{" "}
-            <span className="landing-text-gradient">Sin ataduras.</span>
+            Elegí la tranquilidad de{" "}
+            <span className="landing-text-gradient">anticiparte.</span>
           </h2>
           <p className="mt-5 text-lg text-[#6B6B6B] md:text-xl">
-            30 días gratis, sin tarjeta de crédito
+            Radar, alertas y facturación para depender menos de planillas y del
+            portal de ARCA.
           </p>
         </div>
 
@@ -62,7 +63,7 @@ export function Pricing({ onOpenWaitlist }: PricingProps) {
             <Card
               className={`landing-hover-lift relative rounded-[2rem] p-4 md:py-6 ${
                 plan.badge
-                  ? "overflow-visible landing-glass scale-[1.01] border-2 border-[#185FA5]/25 shadow-2xl"
+                  ? "landing-glass scale-[1.01] overflow-visible border-2 border-[#185FA5]/25 shadow-2xl"
                   : "border border-[#DDE8FF] bg-white shadow-lg"
               }`}
               key={plan.name}
@@ -128,10 +129,13 @@ export function Pricing({ onOpenWaitlist }: PricingProps) {
                       ? "landing-primary-gradient text-white shadow-xl hover:opacity-95"
                       : "border-2 border-[#185FA5] bg-white text-[#185FA5] hover:bg-[#185FA5]/5"
                   }`}
+                  data-track-detail={plan.name}
+                  data-track-event="waitlist_open"
+                  data-track-source="pricing"
                   onClick={onOpenWaitlist}
                 >
                   <Sparkles className="size-4" />
-                  Empezar gratis
+                  Probar radar fiscal
                 </Button>
               </CardFooter>
             </Card>

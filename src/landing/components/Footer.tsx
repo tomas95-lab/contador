@@ -12,7 +12,7 @@ export function Footer() {
               className="h-5 w-auto"
               src={brandAssets.wordmark.navy}
             />
-            <span>Tu monotributo bajo control</span>
+            <span>Radar fiscal para monotributistas</span>
           </div>
           <p className="text-xs leading-5 text-[#6B6B6B]">
             {professionalDisclaimer}
