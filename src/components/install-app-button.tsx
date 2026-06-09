@@ -1,5 +1,6 @@
 import * as React from "react"
-import { DownloadIcon, ShareIcon } from "lucide-react"
+import { DownloadIcon, ShareIcon, XIcon } from "lucide-react"
+import { useLocation } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -15,12 +16,18 @@ import {
   shouldShowIosInstallInstructions,
 } from "@/lib/pwa-install"
 
+const DISMISSED_KEY = "install-prompt-dismissed"
+
 export function InstallAppButton() {
+  const location = useLocation()
   const [installPrompt, setInstallPrompt] =
     React.useState<BeforeInstallPromptEvent | null>(null)
   const [isInstalled, setIsInstalled] = React.useState(false)
   const [showIosInstructions, setShowIosInstructions] = React.useState(false)
   const [isInstructionsOpen, setIsInstructionsOpen] = React.useState(false)
+  const [dismissed, setDismissed] = React.useState(
+    () => localStorage.getItem(DISMISSED_KEY) === "1"
+  )
 
   React.useEffect(() => {
     setIsInstalled(isStandaloneDisplayMode())
@@ -49,8 +56,18 @@ export function InstallAppButton() {
     }
   }, [])
 
-  if (isInstalled || (!installPrompt && !showIosInstructions)) {
+  if (
+    location.pathname === "/" ||
+    isInstalled ||
+    dismissed ||
+    (!installPrompt && !showIosInstructions)
+  ) {
     return null
+  }
+
+  function handleDismiss() {
+    localStorage.setItem(DISMISSED_KEY, "1")
+    setDismissed(true)
   }
 
   async function handleInstallClick() {
@@ -67,19 +84,31 @@ export function InstallAppButton() {
 
   return (
     <>
-      <Button
-        className="fixed right-4 bottom-4 z-40 h-9 gap-1.5 px-3 text-xs shadow-lg sm:right-5 sm:bottom-5"
-        onClick={() => void handleInstallClick()}
-        type="button"
-        variant="outline"
-      >
-        {showIosInstructions && !installPrompt ? (
-          <ShareIcon className="size-3.5" />
-        ) : (
-          <DownloadIcon className="size-3.5" />
-        )}
-        <span>Agregar Contable al inicio</span>
-      </Button>
+      <div className="fixed right-4 bottom-4 z-40 flex items-center gap-1 sm:right-5 sm:bottom-5">
+        <Button
+          className="h-9 gap-1.5 px-3 text-xs shadow-lg"
+          onClick={() => void handleInstallClick()}
+          type="button"
+          variant="outline"
+        >
+          {showIosInstructions && !installPrompt ? (
+            <ShareIcon className="size-3.5" />
+          ) : (
+            <DownloadIcon className="size-3.5" />
+          )}
+          <span>Agregar Contable al inicio</span>
+        </Button>
+        <Button
+          aria-label="Ocultar"
+          className="size-7 shadow-lg"
+          onClick={handleDismiss}
+          size="icon"
+          type="button"
+          variant="outline"
+        >
+          <XIcon className="size-3.5" />
+        </Button>
+      </div>
 
       <Dialog
         onOpenChange={setIsInstructionsOpen}
