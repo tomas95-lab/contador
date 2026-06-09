@@ -23,6 +23,13 @@ export interface WsfeInvoiceInput {
   dueDate?: string
 }
 
+export type WsfeEmissionHooks = {
+  onPrepared?: (attempt: {
+    invoiceNumber: number
+    pointOfSale: number
+  }) => Promise<void>
+}
+
 export interface EmittedWsfeInvoice {
   cae: string
   caeExpiresAt: string | null
@@ -142,16 +149,18 @@ async function getLastAuthorizedInvoiceNumber(
 
 export async function emitFacturaC(
   credentials: UserArcaCredentials,
-  input: WsfeInvoiceInput
+  input: WsfeInvoiceInput,
+  hooks: WsfeEmissionHooks = {}
 ): Promise<EmittedWsfeInvoice> {
   return withWsfeTicketRetry(credentials, () =>
-    emitFacturaCOnce(credentials, input)
+    emitFacturaCOnce(credentials, input, hooks)
   )
 }
 
 async function emitFacturaCOnce(
   credentials: UserArcaCredentials,
-  input: WsfeInvoiceInput
+  input: WsfeInvoiceInput,
+  hooks: WsfeEmissionHooks
 ): Promise<EmittedWsfeInvoice> {
   const ticket = await getAccessTicket(credentials, "wsfe")
   const client = (await getSoapClient(
@@ -164,6 +173,7 @@ async function emitFacturaCOnce(
     authData,
     pointOfSale
   )
+  await hooks.onPrepared?.({ invoiceNumber, pointOfSale })
   const amount = roundMoney(input.amount)
   const today = toArcaDate()
   const clientCuit = input.clientCuit ? normalizeCuit(input.clientCuit) : ""

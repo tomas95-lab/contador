@@ -1,4 +1,6 @@
 import { supabase } from "@/lib/supabase"
+import { getFiscalEvaluationPeriod } from "@/lib/accounting"
+import { sendPushAlertNotification } from "@/lib/push-notifications"
 import type { ProactiveAlert } from "@/types/accounting"
 import type { Database } from "@/types/database"
 
@@ -116,7 +118,6 @@ export async function syncAlerts(alerts: ProactiveAlert[]) {
     .from("risk_alerts")
     .select("*")
     .contains("metadata", {
-      period_key: periodKey,
       source: ALERT_SOURCE,
     })
 
@@ -124,30 +125,32 @@ export async function syncAlerts(alerts: ProactiveAlert[]) {
     throw error
   }
 
-  const existingAlerts = data.map(mapRiskAlertRow)
+  const allProactiveAlerts = data.map(mapRiskAlertRow)
+  const existingAlerts = allProactiveAlerts.filter(
+    (alert) => alert.metadata?.period_key === periodKey
+  )
   const existingByType = new Map(
     existingAlerts.map((alert) => [alert.type, alert])
   )
   const calculatedTypes = new Set(alerts.map((alert) => alert.id))
   const now = new Date().toISOString()
-  const rowsToInsert: RiskAlertInsert[] = alerts
-    .filter((alert) => !existingByType.has(alert.id))
-    .map((alert) => ({
-      action_label: alert.action,
-      action_url: null,
-      is_read: false,
-      is_resolved: false,
-      message: alert.description,
-      metadata: {
-        period_key: periodKey,
-        source: ALERT_SOURCE,
-      },
-      severity: mapSeverity(alert.severity),
-      title: alert.title,
-      type: alert.id,
-      updated_at: now,
-      user_id: userId,
-    }))
+  const newAlerts = alerts.filter((alert) => !existingByType.has(alert.id))
+  const rowsToInsert: RiskAlertInsert[] = newAlerts.map((alert) => ({
+    action_label: alert.action,
+    action_url: null,
+    is_read: false,
+    is_resolved: false,
+    message: alert.description,
+    metadata: {
+      period_key: periodKey,
+      source: ALERT_SOURCE,
+    },
+    severity: mapSeverity(alert.severity),
+    title: alert.title,
+    type: alert.id,
+    updated_at: now,
+    user_id: userId,
+  }))
   const rowsToUpdate = alerts
     .map((alert) => {
       const existing = existingByType.get(alert.id)
@@ -162,8 +165,13 @@ export async function syncAlerts(alerts: ProactiveAlert[]) {
     .filter((item): item is { alert: ProactiveAlert; existing: RiskAlert } =>
       Boolean(item)
     )
-  const staleAlertIds = existingAlerts
-    .filter((alert) => !alert.isResolved && !calculatedTypes.has(alert.type))
+  const staleAlertIds = allProactiveAlerts
+    .filter(
+      (alert) =>
+        !alert.isResolved &&
+        (alert.metadata?.period_key !== periodKey ||
+          !calculatedTypes.has(alert.type))
+    )
     .map((alert) => alert.id)
 
   if (rowsToInsert.length > 0) {
@@ -174,6 +182,10 @@ export async function syncAlerts(alerts: ProactiveAlert[]) {
     if (insertError) {
       throw insertError
     }
+
+    void sendPushAlertNotification(newAlerts).catch((error) => {
+      console.error("push.alert_delivery_failed", error)
+    })
   }
 
   await Promise.all(
@@ -258,9 +270,9 @@ async function getCurrentUserId() {
 }
 
 function getCurrentAlertPeriodKey(referenceDate = new Date()) {
-  const month = `${referenceDate.getMonth() + 1}`.padStart(2, "0")
+  const period = getFiscalEvaluationPeriod(referenceDate)
 
-  return `${referenceDate.getFullYear()}-${month}`
+  return `${period.startDate}:${period.endDate}`
 }
 
 function assertSupabase() {

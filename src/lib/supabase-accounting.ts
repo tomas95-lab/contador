@@ -67,7 +67,6 @@ export async function createPayment(payment: Omit<IncomePayment, "id">) {
       client: payment.client,
       description: payment.description,
       method: payment.method,
-      invoice_status: payment.invoiceStatus,
       user_id: userId,
     })
     .select("*")
@@ -91,7 +90,6 @@ export async function updatePayment(payment: IncomePayment) {
       client: payment.client,
       description: payment.description,
       method: payment.method,
-      invoice_status: payment.invoiceStatus,
     })
     .eq("id", payment.id)
     .select("*")
@@ -133,61 +131,6 @@ export async function fetchInvoices(limit = 500) {
   }
 
   return data.map(mapInvoiceRow)
-}
-
-export async function createInvoice(invoice: Omit<GeneratedInvoice, "id">) {
-  assertSupabase()
-  const userId = await getCurrentUserId()
-
-  const { data, error } = await supabase!
-    .from("invoices")
-    .upsert(
-      {
-        payment_id: invoice.paymentId,
-        number: invoice.number,
-        invoice_type: invoice.invoiceType,
-        point_of_sale: invoice.pointOfSale,
-        issue_date: invoice.issueDate,
-        client: invoice.client,
-        description: invoice.description,
-        amount: invoice.amount,
-        currency_id: invoice.currencyId,
-        exchange_rate: invoice.exchangeRate,
-        amount_ars: invoice.amountArs,
-        cae: invoice.cae,
-        cae_expires_at: invoice.caeExpiresAt,
-        status: invoice.status,
-        user_id: userId,
-      },
-      { onConflict: "user_id,invoice_type,point_of_sale,number" }
-    )
-    .select("*")
-    .single()
-
-  if (error) {
-    throw error
-  }
-
-  return mapInvoiceRow(data)
-}
-
-export async function markPaymentAsInvoiced(paymentId: string) {
-  assertSupabase()
-
-  const { data, error } = await supabase!
-    .from("payments")
-    .update({
-      invoice_status: "facturado",
-    })
-    .eq("id", paymentId)
-    .select("*")
-    .single()
-
-  if (error) {
-    throw error
-  }
-
-  return mapPaymentRow(data)
 }
 
 export async function fetchAssistantMessages() {

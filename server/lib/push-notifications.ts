@@ -7,7 +7,7 @@ type PushConfig = {
   source: "env" | "ephemeral-dev"
 }
 
-type PushPayload = {
+export type PushPayload = {
   body: string
   tag: string
   title: string
@@ -24,7 +24,8 @@ export function getPushConfig() {
 
   const publicKey = process.env.PUSH_VAPID_PUBLIC_KEY
   const privateKey = process.env.PUSH_VAPID_PRIVATE_KEY
-  const subject = process.env.PUSH_VAPID_SUBJECT ?? "mailto:soporte@contable.app"
+  const subject =
+    process.env.PUSH_VAPID_SUBJECT ?? "mailto:soporte@contable.app"
 
   if (publicKey && privateKey) {
     cachedConfig = {

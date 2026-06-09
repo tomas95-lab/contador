@@ -7,6 +7,7 @@ import { isoDateTime } from "./date.js"
 import { ArcaError } from "./errors.js"
 import { record } from "./objects.js"
 import { getSoapClient } from "./soap.js"
+import { withArcaRequestTimeout } from "./timeout.js"
 
 export type ArcaServiceId = "wsfe" | "wsfex"
 
@@ -179,14 +180,19 @@ async function requestNewTicket(
   const loginTicketRequest = buildLoginTicketRequest(service)
   const cms = signCms(credentials, loginTicketRequest)
   const client = await getSoapClient(config.arca.endpoints.wsaaUrl)
-  const [result] = await client
-    .loginCmsAsync({ in0: cms })
-    .catch((error: unknown) => {
-      throw asWsaaError(error, service)
-    })
-  const responseXml = result?.loginCmsReturn
+  const [result] = await withArcaRequestTimeout<[unknown]>(
+    "loginCms",
+    client.loginCmsAsync({ in0: cms }) as Promise<[unknown]>
+  ).catch((error: unknown) => {
+    if (error instanceof ArcaError) {
+      throw error
+    }
 
-  if (!responseXml) {
+    throw asWsaaError(error, service)
+  })
+  const responseXml = record(result).loginCmsReturn
+
+  if (typeof responseXml !== "string" || !responseXml) {
     throw new ArcaError(
       "ARCA no devolvió una respuesta válida. Volvé a intentar más tarde.",
       502,

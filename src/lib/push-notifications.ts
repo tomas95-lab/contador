@@ -1,4 +1,5 @@
 import { backendApiPath, getBackendAuthHeaders } from "@/lib/backend-api"
+import type { ProactiveAlert } from "@/types/accounting"
 
 export type PushNotificationChannel =
   | "arca-status"
@@ -57,6 +58,23 @@ export async function getCurrentPushSubscription() {
   return registration.pushManager.getSubscription()
 }
 
+export async function syncCurrentPushSubscription() {
+  const existingSubscription = await getCurrentPushSubscription()
+
+  if (!existingSubscription) {
+    return null
+  }
+
+  const publicKey = await fetchPushPublicKey()
+  const subscription = await ensureSubscriptionUsesPublicKey(
+    existingSubscription,
+    publicKey
+  )
+  await savePushSubscription(subscription)
+
+  return subscription
+}
+
 export async function subscribeToPushNotifications() {
   const readiness = getPushSubscriptionReadiness()
 
@@ -72,12 +90,10 @@ export async function subscribeToPushNotifications() {
 
   const registration = await getReadyServiceWorkerRegistration()
   const publicKey = await fetchPushPublicKey()
-  const subscription =
-    (await registration.pushManager.getSubscription()) ??
-    (await registration.pushManager.subscribe({
-      applicationServerKey: urlBase64ToUint8Array(publicKey),
-      userVisibleOnly: true,
-    }))
+  const existingSubscription = await registration.pushManager.getSubscription()
+  const subscription = existingSubscription
+    ? await ensureSubscriptionUsesPublicKey(existingSubscription, publicKey)
+    : await createPushSubscription(registration, publicKey)
 
   await savePushSubscription(subscription)
   return subscription
@@ -111,6 +127,32 @@ export async function sendPushTestNotification() {
       sent: number
     }
   }>
+}
+
+export async function sendPushAlertNotification(alerts: ProactiveAlert[]) {
+  if (alerts.length === 0) {
+    return
+  }
+
+  const response = await fetch(backendApiPath("/api/push/alerts"), {
+    body: JSON.stringify({
+      alerts: alerts.map(({ description, id, severity, title }) => ({
+        description,
+        id,
+        severity,
+        title,
+      })),
+    }),
+    headers: {
+      ...(await getBackendAuthHeaders()),
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  })
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response))
+  }
 }
 
 async function fetchPushPublicKey() {
@@ -185,6 +227,50 @@ async function getReadyServiceWorkerRegistration() {
       )
     }),
   ])
+}
+
+async function ensureSubscriptionUsesPublicKey(
+  subscription: PushSubscription,
+  publicKey: string
+) {
+  if (subscriptionUsesPublicKey(subscription, publicKey)) {
+    return subscription
+  }
+
+  await removePushSubscription(subscription.endpoint)
+  await subscription.unsubscribe()
+
+  const registration = await getReadyServiceWorkerRegistration()
+  return createPushSubscription(registration, publicKey)
+}
+
+function createPushSubscription(
+  registration: ServiceWorkerRegistration,
+  publicKey: string
+) {
+  return registration.pushManager.subscribe({
+    applicationServerKey: urlBase64ToUint8Array(publicKey),
+    userVisibleOnly: true,
+  })
+}
+
+function subscriptionUsesPublicKey(
+  subscription: PushSubscription,
+  publicKey: string
+) {
+  const applicationServerKey = subscription.options.applicationServerKey
+
+  if (!applicationServerKey) {
+    return false
+  }
+
+  const currentKey = new Uint8Array(applicationServerKey)
+  const expectedKey = urlBase64ToUint8Array(publicKey)
+
+  return (
+    currentKey.length === expectedKey.length &&
+    currentKey.every((value, index) => value === expectedKey[index])
+  )
 }
 
 async function readApiError(response: Response) {

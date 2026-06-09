@@ -12,10 +12,10 @@ import {
 } from "@/components/ui/card"
 import {
   fetchPushStatus,
-  getCurrentPushSubscription,
   getPushSubscriptionReadiness,
   sendPushTestNotification,
   subscribeToPushNotifications,
+  syncCurrentPushSubscription,
   unsubscribeFromPushNotifications,
   type PushSubscriptionReadiness,
 } from "@/lib/push-notifications"
@@ -36,9 +36,12 @@ export function PushNotificationsCard({ enabled }: PushNotificationsCardProps) {
   const [error, setError] = React.useState<string | null>(null)
   const [isBusy, setIsBusy] = React.useState(false)
   const [isTesting, setIsTesting] = React.useState(false)
-  const [lastTestResult, setLastTestResult] = React.useState<string | null>(null)
-  const [readiness, setReadiness] =
-    React.useState<PushSubscriptionReadiness>("service-worker-unavailable")
+  const [lastTestResult, setLastTestResult] = React.useState<string | null>(
+    null
+  )
+  const [readiness, setReadiness] = React.useState<PushSubscriptionReadiness>(
+    "service-worker-unavailable"
+  )
   const [status, setStatus] = React.useState<PushUiStatus>("loading")
 
   React.useEffect(() => {
@@ -66,10 +69,7 @@ export function PushNotificationsCard({ enabled }: PushNotificationsCardProps) {
       }
 
       try {
-        const [serverStatus, subscription] = await Promise.all([
-          fetchPushStatus(),
-          getCurrentPushSubscription().catch(() => null),
-        ])
+        const serverStatus = await fetchPushStatus()
 
         if (cancelled) {
           return
@@ -77,6 +77,12 @@ export function PushNotificationsCard({ enabled }: PushNotificationsCardProps) {
 
         if (!serverStatus.configured) {
           setStatus("server-disabled")
+          return
+        }
+
+        const subscription = await syncCurrentPushSubscription()
+
+        if (cancelled) {
           return
         }
 

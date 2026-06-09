@@ -3,6 +3,7 @@ import { z } from "zod"
 
 import { roundMoney } from "../arca/date.js"
 import { ArcaError, translateArcaError } from "../arca/errors.js"
+import { isAmbiguousArcaAuthorizationTimeout } from "../arca/timeout.js"
 import { config } from "../config.js"
 import {
   emitFacturaC,
@@ -20,6 +21,7 @@ import {
   getUserArcaCredentials,
   type UserArcaCredentials,
 } from "../lib/arca-credentials.js"
+import { withArcaEmissionLock } from "../lib/arca-emission-lock.js"
 import {
   logAuthorizedInvoiceSaveFailure,
   logInvoiceEmissionAudit,
@@ -31,17 +33,28 @@ import {
   persistEmittedInvoice,
 } from "../lib/invoice-persistence.js"
 import {
+  findPersistedInvoiceByPayment,
+  getInvoiceEmissionAttempt,
+  markInvoiceEmissionAttemptFailed,
+  markInvoiceEmissionAttemptPersisted,
+  parseStoredAuthorizedResult,
+  prepareInvoiceEmissionAttempt,
+  recordAuthorizedInvoiceEmission,
+  recordInvoiceEmissionNumber,
+} from "../lib/invoice-emission-attempt.js"
+import {
   claimPaymentForInvoiceEmission,
   releasePaymentEmissionClaim,
 } from "../lib/payment-emission.js"
+import {
+  buildInvoiceAuthorizedPush,
+  sendPushToUser,
+} from "../lib/user-push-notifications.js"
 
-const invoiceDateSchema = z
-  .string()
-  .trim()
-  .refine(isValidInvoiceDate, {
-    message:
-      "Ingresá una fecha válida en formato AAAA-MM-DD o AAAAMMDD, dentro de los 12 meses anteriores o posteriores.",
-  })
+const invoiceDateSchema = z.string().trim().refine(isValidInvoiceDate, {
+  message:
+    "Ingresá una fecha válida en formato AAAA-MM-DD o AAAAMMDD, dentro de los 12 meses anteriores o posteriores.",
+})
 
 export const emitInvoiceSchema = z
   .object({
@@ -138,6 +151,10 @@ const annualSummarySchema = z.object({
     .default(new Date().getFullYear()),
 })
 
+const reconcileInvoiceSchema = z.object({
+  paymentId: z.string().uuid(),
+})
+
 const historicalQuerySchema = z.object({
   wsfe: z.string().optional(),
   wsfex: z.string().optional(),
@@ -153,52 +170,140 @@ export async function emitInvoice(req: Request, res: Response): Promise<void> {
     | Awaited<ReturnType<typeof emitFacturaE>>
     | undefined
   let claimedPaymentId: string | undefined
+  let paymentClaimed = false
+  let emissionAttemptId: string | undefined
 
   try {
     credentials = await getRequestArcaCredentials(req)
     claimedPaymentId = payload.paymentId ?? payload.payment_id
+    const pointOfSale =
+      payload.invoiceType === "E"
+        ? credentials.wsfexPointOfSale
+        : credentials.wsfePointOfSale
 
-    if (claimedPaymentId) {
-      await claimPaymentForInvoiceEmission({
-        paymentId: claimedPaymentId,
+    await withArcaEmissionLock(
+      {
+        environment: credentials.arcaEnvironment,
+        invoiceType: payload.invoiceType,
+        pointOfSale,
         userId: credentials.userId,
-      })
+      },
+      async () => {
+        if (claimedPaymentId) {
+          await claimPaymentForInvoiceEmission({
+            paymentId: claimedPaymentId,
+            userId: credentials!.userId,
+          })
+          paymentClaimed = true
+        }
+
+        const invoiceInput = buildEmissionPayload(payload)
+        const clientName =
+          payload.invoiceType === "E"
+            ? (payload.foreignClientName ?? payload.clientName)
+            : payload.clientName
+
+        if (claimedPaymentId) {
+          emissionAttemptId = await prepareInvoiceEmissionAttempt({
+            clientName,
+            invoiceType: payload.invoiceType,
+            paymentId: claimedPaymentId,
+            pointOfSale,
+            receiverCuit: invoiceInput.clientCuit,
+            userId: credentials!.userId,
+          })
+        }
+
+        const emissionHooks = emissionAttemptId
+          ? {
+              onPrepared: ({
+                invoiceNumber,
+              }: {
+                invoiceNumber: number
+                pointOfSale: number
+              }) =>
+                recordInvoiceEmissionNumber({
+                  attemptId: emissionAttemptId!,
+                  invoiceNumber,
+                  userId: credentials!.userId,
+                }),
+            }
+          : undefined
+
+        result =
+          payload.invoiceType === "C"
+            ? await emitFacturaC(credentials!, invoiceInput, emissionHooks)
+            : await emitFacturaE(credentials!, invoiceInput, emissionHooks)
+
+        if (emissionAttemptId) {
+          await recordAuthorizedInvoiceEmission(
+            emissionAttemptId,
+            credentials!.userId,
+            result
+          )
+        }
+
+        const persistedInvoice = buildPersistedInvoiceRow({
+          clientName,
+          paymentId: payload.paymentId ?? payload.payment_id,
+          receiverCuit: invoiceInput.clientCuit,
+          result,
+          userId: credentials!.userId,
+        })
+
+        const savedInvoice = await persistEmittedInvoice(persistedInvoice, {
+          receiverCuit: invoiceInput.clientCuit,
+        })
+
+        if (emissionAttemptId) {
+          await markInvoiceEmissionAttemptPersisted(
+            emissionAttemptId,
+            credentials!.userId
+          )
+        }
+
+        logInvoiceEmissionAudit({
+          amount: result.invoice.amount,
+          invoiceType: result.invoice.invoiceType,
+          number: result.invoice.number,
+          pointOfSale: result.invoice.pointOfSale,
+          result: "authorized_saved",
+          userId: credentials!.userId,
+        })
+
+        notifyInvoiceAuthorized({
+          invoiceType: result.invoice.invoiceType,
+          number: result.invoice.number,
+          pointOfSale: result.invoice.pointOfSale,
+          userId: credentials!.userId,
+        })
+
+        res.status(201).json({
+          ...result,
+          invoiceRecord: savedInvoice,
+        })
+      }
+    )
+  } catch (error) {
+    if (
+      emissionAttemptId &&
+      credentials &&
+      !result &&
+      !isAmbiguousArcaAuthorizationTimeout(error)
+    ) {
+      await markInvoiceEmissionAttemptFailed(
+        emissionAttemptId,
+        credentials.userId
+      )
     }
 
-    const invoiceInput = buildEmissionPayload(payload)
-    result =
-      payload.invoiceType === "C"
-        ? await emitFacturaC(credentials, invoiceInput)
-        : await emitFacturaE(credentials, invoiceInput)
-    const persistedInvoice = buildPersistedInvoiceRow({
-      clientName:
-        payload.invoiceType === "E"
-          ? payload.foreignClientName ?? payload.clientName
-          : payload.clientName,
-      paymentId: payload.paymentId ?? payload.payment_id,
-      receiverCuit: invoiceInput.clientCuit,
-      result,
-      userId: credentials.userId,
-    })
-
-    const savedInvoice = await persistEmittedInvoice(persistedInvoice, {
-      receiverCuit: invoiceInput.clientCuit,
-    })
-    logInvoiceEmissionAudit({
-      amount: result.invoice.amount,
-      invoiceType: result.invoice.invoiceType,
-      number: result.invoice.number,
-      pointOfSale: result.invoice.pointOfSale,
-      result: "authorized_saved",
-      userId: credentials.userId,
-    })
-
-    res.status(201).json({
-      ...result,
-      invoiceRecord: savedInvoice,
-    })
-  } catch (error) {
-    if (!result && credentials && claimedPaymentId) {
+    if (
+      !result &&
+      credentials &&
+      claimedPaymentId &&
+      paymentClaimed &&
+      !isAmbiguousArcaAuthorizationTimeout(error)
+    ) {
       await releasePaymentEmissionClaim({
         paymentId: claimedPaymentId,
         userId: credentials.userId,
@@ -252,6 +357,109 @@ export async function emitInvoice(req: Request, res: Response): Promise<void> {
 
     throw error
   }
+}
+
+export async function reconcileInvoice(
+  req: Request,
+  res: Response
+): Promise<void> {
+  const { paymentId } = reconcileInvoiceSchema.parse(req.body)
+  const credentials = await getRequestArcaCredentials(req)
+  const existingInvoice = await findPersistedInvoiceByPayment(
+    paymentId,
+    credentials.userId
+  )
+
+  if (existingInvoice) {
+    res.json({
+      status: "already-persisted",
+      invoiceRecord: existingInvoice,
+    })
+    return
+  }
+
+  const attempt = await getInvoiceEmissionAttempt(paymentId, credentials.userId)
+
+  if (!attempt) {
+    throw new ArcaError(
+      "No encontramos un intento de emisión para reconciliar.",
+      404
+    )
+  }
+
+  if (attempt.status !== "authorized" || !attempt.authorizedResult) {
+    res.status(202).json({
+      status: "manual-review-required",
+      invoiceNumber: attempt.invoiceNumber,
+      invoiceType: attempt.invoiceType,
+      pointOfSale: attempt.pointOfSale,
+    })
+    return
+  }
+
+  await withArcaEmissionLock(
+    {
+      environment: credentials.arcaEnvironment,
+      invoiceType: attempt.invoiceType,
+      pointOfSale: attempt.pointOfSale,
+      userId: credentials.userId,
+    },
+    async () => {
+      const persistedInvoice = await findPersistedInvoiceByPayment(
+        paymentId,
+        credentials.userId
+      )
+
+      if (persistedInvoice) {
+        await markInvoiceEmissionAttemptPersisted(
+          attempt.id,
+          credentials.userId
+        )
+        res.json({
+          status: "already-persisted",
+          invoiceRecord: persistedInvoice,
+        })
+        return
+      }
+
+      const result = parseStoredAuthorizedResult(attempt.authorizedResult)
+
+      if (
+        result.invoice.invoiceType !== attempt.invoiceType ||
+        result.invoice.pointOfSale !== attempt.pointOfSale ||
+        (attempt.invoiceNumber !== null &&
+          result.invoice.number !== attempt.invoiceNumber)
+      ) {
+        throw new ArcaError(
+          "El resultado autorizado no coincide con el intento de emisión.",
+          409
+        )
+      }
+
+      const row = buildPersistedInvoiceRow({
+        clientName: attempt.clientName,
+        paymentId,
+        receiverCuit: attempt.receiverCuit,
+        result,
+        userId: credentials.userId,
+      })
+      const savedInvoice = await persistEmittedInvoice(row, {
+        receiverCuit: attempt.receiverCuit,
+      })
+
+      await markInvoiceEmissionAttemptPersisted(attempt.id, credentials.userId)
+      notifyInvoiceAuthorized({
+        invoiceType: result.invoice.invoiceType,
+        number: result.invoice.number,
+        pointOfSale: result.invoice.pointOfSale,
+        userId: credentials.userId,
+      })
+      res.json({
+        status: "reconciled",
+        invoiceRecord: savedInvoice,
+      })
+    }
+  )
 }
 
 export async function getAnnualArcaSummary(
@@ -627,4 +835,33 @@ function parseInvoiceDate(value: string) {
 
 function normalizeComparableDate(value: string) {
   return value.replaceAll("-", "")
+}
+
+function notifyInvoiceAuthorized({
+  invoiceType,
+  number,
+  pointOfSale,
+  userId,
+}: {
+  invoiceType: "C" | "E"
+  number: number
+  pointOfSale: number
+  userId: string
+}) {
+  void sendPushToUser(
+    userId,
+    buildInvoiceAuthorizedPush({
+      invoiceType,
+      number,
+      pointOfSale,
+    })
+  ).catch((error) => {
+    console.error("push.invoice_delivery_failed", {
+      error: error instanceof Error ? error.message : "Unknown push error",
+      invoiceType,
+      number,
+      pointOfSale,
+      userId,
+    })
+  })
 }

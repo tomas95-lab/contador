@@ -1,5 +1,6 @@
 import type { EmittedWsfeInvoice } from "../arca/wsfe.js"
 import type { EmittedWsfexInvoice } from "../arca/wsfex.js"
+import { fromArcaDate, toArcaDate } from "../arca/date.js"
 import { ArcaError } from "../arca/errors.js"
 import { getSupabaseAdmin } from "./supabase-admin.js"
 
@@ -146,5 +147,5 @@ function getInvoiceAmountArs(result: EmittedArcaInvoice) {
 }
 
 function todayDate() {
-  return new Date().toISOString().slice(0, 10)
+  return fromArcaDate(toArcaDate())!
 }

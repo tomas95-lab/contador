@@ -2,6 +2,8 @@ import https from "node:https"
 
 import soap, { type Client, type ISecurity } from "soap"
 
+import { withArcaRequestTimeout } from "./timeout.js"
+
 const clients = new Map<string, Promise<Client>>()
 const arcaHttpsAgent = new https.Agent({
   ciphers: "DEFAULT@SECLEVEL=0",
@@ -24,10 +26,16 @@ export async function getSoapClient(endpoint: string): Promise<Client> {
 
   let clientPromise = clients.get(key)
   if (!clientPromise) {
-    clientPromise = soap.createClientAsync(wsdlUrl, {
-      disableCache: false,
-      endpoint,
-      wsdl_options: arcaSoapOptions,
+    clientPromise = withArcaRequestTimeout(
+      "SOAP client creation",
+      soap.createClientAsync(wsdlUrl, {
+        disableCache: false,
+        endpoint,
+        wsdl_options: arcaSoapOptions,
+      })
+    ).catch((error) => {
+      clients.delete(key)
+      throw error
     })
     clients.set(key, clientPromise)
   }

@@ -36,6 +36,13 @@ export interface WsfexInvoiceInput {
   dueDate?: string
 }
 
+export type WsfexEmissionHooks = {
+  onPrepared?: (attempt: {
+    invoiceNumber: number
+    pointOfSale: number
+  }) => Promise<void>
+}
+
 export interface EmittedWsfexInvoice {
   cae: string
   caeExpiresAt: string | null
@@ -252,9 +259,7 @@ export async function getWsfexDestinationCountries(
 
     ensureNoFexError(result, "FEXGetPARAM_DST_pais")
 
-    return asArray(
-      record(record(result).FEXResultGet).ClsFEXResponse_DST_pais
-    )
+    return asArray(record(record(result).FEXResultGet).ClsFEXResponse_DST_pais)
       .map((country) => {
         const countryRecord = record(country)
 
@@ -426,16 +431,18 @@ async function consultFacturaE(
 
 export async function emitFacturaE(
   credentials: UserArcaCredentials,
-  input: WsfexInvoiceInput
+  input: WsfexInvoiceInput,
+  hooks: WsfexEmissionHooks = {}
 ): Promise<EmittedWsfexInvoice> {
   return withWsfexTicketRetry(credentials, () =>
-    emitFacturaEOnce(credentials, input)
+    emitFacturaEOnce(credentials, input, hooks)
   )
 }
 
 async function emitFacturaEOnce(
   credentials: UserArcaCredentials,
-  input: WsfexInvoiceInput
+  input: WsfexInvoiceInput,
+  hooks: WsfexEmissionHooks
 ): Promise<EmittedWsfexInvoice> {
   const amount = roundMoney(input.amount)
   const currencyId = normalizeCurrencyId(input.currencyId)
@@ -464,6 +471,7 @@ async function emitFacturaEOnce(
     getNextRequestId(client, authData),
     getNextInvoiceNumber(client, authData, pointOfSale),
   ])
+  await hooks.onPrepared?.({ invoiceNumber, pointOfSale })
 
   const cmp: Record<string, unknown> = {
     Id: requestId,

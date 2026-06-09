@@ -12,6 +12,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
+    "push:generate-vapid": "web-push generate-vapid-keys",
     "test": "vitest",
     "test:run": "vitest run",
     "typecheck": "tsc --noEmit",

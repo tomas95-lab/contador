@@ -143,6 +143,14 @@ export type EmittedArcaInvoice = {
   }
 }
 
+export type ArcaInvoiceReconciliation = {
+  status: "reconciled" | "already-persisted" | "manual-review-required"
+  invoiceNumber?: number | null
+  invoiceType?: "C" | "E"
+  pointOfSale?: number
+  invoiceRecord?: EmittedArcaInvoice["invoiceRecord"]
+}
+
 export type ArcaAssistantContext = {
   kind: "arca-assistant-context"
   generatedAt: string
@@ -235,6 +243,28 @@ export async function emitArcaInvoice(payload: ArcaInvoiceEmissionPayload) {
   }
 
   return (await response.json()) as EmittedArcaInvoice
+}
+
+export async function reconcileArcaInvoice(paymentId: string) {
+  const response = await fetch(backendApiPath("/api/invoices/reconcile"), {
+    body: JSON.stringify({ paymentId }),
+    headers: {
+      ...(await getArcaAuthHeaders()),
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  })
+
+  if (!response.ok) {
+    const details = await parseArcaError(response)
+
+    throw new Error(
+      details ??
+        "No pudimos reconciliar la factura. Revisá el historial ARCA antes de volver a emitir."
+    )
+  }
+
+  return (await response.json()) as ArcaInvoiceReconciliation
 }
 
 export async function fetchArcaHistoricalInvoices({

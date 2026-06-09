@@ -16,7 +16,13 @@ type SafePushPayload = {
   url?: string
 }
 
-const sensitiveRequestMethods = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const
+const sensitiveRequestMethods = [
+  "GET",
+  "POST",
+  "PUT",
+  "PATCH",
+  "DELETE",
+] as const
 const sensitiveRequestPatterns = [
   /\/api(?:\/|$)/,
   /\/(?:auth|functions|rest)\/v1(?:\/|$)/,
@@ -125,7 +131,12 @@ async function openOrFocusClient(path: string) {
     const clientUrl = new URL(client.url)
 
     if (clientUrl.origin === target.origin && "focus" in client) {
-      await client.focus()
+      const navigatedClient =
+        clientUrl.href === target.href || !("navigate" in client)
+          ? client
+          : await client.navigate(target.href)
+
+      await (navigatedClient ?? client).focus()
       return
     }
   }
@@ -138,5 +149,7 @@ function truncateText(value: string | undefined, maxLength: number) {
     return ""
   }
 
-  return value.length > maxLength ? `${value.slice(0, maxLength - 3)}...` : value
+  return value.length > maxLength
+    ? `${value.slice(0, maxLength - 3)}...`
+    : value
 }

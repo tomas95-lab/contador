@@ -230,27 +230,7 @@ export function PaymentsTable({
                     )}
                   </TableCell>
                   <TableCell>
-                    {currentDraft ? (
-                      <Select
-                        value={currentDraft.invoiceStatus}
-                        onValueChange={(value) =>
-                          updateDraft("invoiceStatus", value as InvoiceStatus)
-                        }
-                      >
-                        <SelectTrigger className="h-8 min-w-28">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="pendiente">Pendiente</SelectItem>
-                          <SelectItem disabled value="emitiendo">
-                            Emitiendo
-                          </SelectItem>
-                          <SelectItem value="facturado">Facturado</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <PaymentStatusBadge status={payment.invoiceStatus} />
-                    )}
+                    <PaymentStatusBadge status={payment.invoiceStatus} />
                   </TableCell>
                   <TableCell className="text-right font-medium tabular-nums">
                     {currentDraft ? (
@@ -297,7 +277,10 @@ export function PaymentsTable({
                           <>
                             {onUpdatePayment && (
                               <Button
-                                disabled={Boolean(pendingPaymentId)}
+                                disabled={
+                                  Boolean(pendingPaymentId) ||
+                                  payment.invoiceStatus !== "pendiente"
+                                }
                                 onClick={() => startEditing(payment)}
                                 size="icon"
                                 type="button"
@@ -309,7 +292,10 @@ export function PaymentsTable({
                             )}
                             {onDeletePayment && (
                               <Button
-                                disabled={Boolean(pendingPaymentId)}
+                                disabled={
+                                  Boolean(pendingPaymentId) ||
+                                  payment.invoiceStatus !== "pendiente"
+                                }
                                 onClick={() => requestDeletePayment(payment)}
                                 size="icon"
                                 type="button"

@@ -220,7 +220,10 @@ export function getFinancialMetrics(
     payments.filter((payment) => getMonthKey(payment.date) === previousMonthKey)
   )
   const periodPayments = getPaymentsInFiscalPeriod(payments, evaluationPeriod)
-  const annualTotal = sumPayments(periodPayments)
+  const fiscalPeriodPayments = periodPayments.filter(
+    (payment) => payment.invoiceStatus === "facturado" || Boolean(payment.cae)
+  )
+  const annualTotal = sumPayments(fiscalPeriodPayments)
   const annualLimitRemaining = category.annualLimit - annualTotal
   const annualUsage = annualTotal / category.annualLimit
   const currentVsPrevious =
@@ -522,18 +525,15 @@ export function getTaxDueHistory(
     const monthKey = `${currentYear}-${String(index + 1).padStart(2, "0")}`
     const dueDate = new Date(currentYear, index, 20)
     const dueDateValue = formatDateInputValue(dueDate)
-    const isPastMonth = index < currentMonth
     const daysUntilDue = getDaysBetween(today, dueDate)
     const taxPayment = paidByMonth.get(monthKey)
     const status: TaxDue["status"] = taxPayment
       ? "paid"
-      : isPastMonth
-        ? "paid"
-        : dueDate < today
-          ? "overdue"
-          : daysUntilDue <= 3
-            ? "due-soon"
-            : "pending"
+      : dueDate < today
+        ? "overdue"
+        : daysUntilDue <= 3
+          ? "due-soon"
+          : "pending"
 
     return {
       id: monthKey,

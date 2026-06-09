@@ -1,22 +1,14 @@
 import type { Request, Response } from "express"
-import type { PushSubscription } from "web-push"
 import { z } from "zod"
 
 import { ArcaError } from "../arca/errors.js"
-import {
-  getPushErrorSummary,
-  getPushPublicKey,
-  isExpiredPushSubscription,
-  sendPushNotification,
-} from "../lib/push-notifications.js"
+import { getPushPublicKey } from "../lib/push-notifications.js"
 import { getSupabaseAdmin } from "../lib/supabase-admin.js"
-
-type PushSubscriptionRow = {
-  id: string
-  endpoint: string
-  p256dh: string
-  auth: string
-}
+import {
+  buildRiskAlertsPush,
+  pushStorageError,
+  sendPushToUser,
+} from "../lib/user-push-notifications.js"
 
 const pushSubscriptionSchema = z.object({
   endpoint: z.string().url(),
@@ -29,6 +21,20 @@ const pushSubscriptionSchema = z.object({
 
 const unsubscribeSchema = z.object({
   endpoint: z.string().url(),
+})
+
+const pushAlertsSchema = z.object({
+  alerts: z
+    .array(
+      z.object({
+        description: z.string().trim().min(1).max(300),
+        id: z.string().trim().min(1).max(100),
+        severity: z.enum(["critical", "info", "warning"]),
+        title: z.string().trim().min(1).max(120),
+      })
+    )
+    .min(1)
+    .max(10),
 })
 
 export async function getPushStatus(req: Request, res: Response) {
@@ -120,44 +126,18 @@ export async function unsubscribeFromPush(req: Request, res: Response) {
 
 export async function sendTestPush(req: Request, res: Response) {
   const userId = getRequestUserId(req)
-  const { data, error } = await getSupabaseAdmin()
-    .from("push_subscriptions")
-    .select("id, endpoint, p256dh, auth")
-    .eq("user_id", userId)
-    .eq("active", true)
-    .returns<PushSubscriptionRow[]>()
+  const result = await sendPushToUser(userId, {
+    body: "Las notificaciones están activas.",
+    tag: "contable-test",
+    title: "Contable",
+    url: "/app",
+  })
 
-  if (error) {
-    throw pushStorageError(error)
-  }
-
-  if (!data.length) {
+  if (result.sent === 0 && result.failed === 0) {
     res.status(404).json({
       error: "No hay una suscripción activa para enviar una prueba.",
     })
     return
-  }
-
-  const result = {
-    failed: 0,
-    sent: 0,
-  }
-
-  for (const subscription of data) {
-    try {
-      await sendPushNotification(toWebPushSubscription(subscription), {
-        body: "Las notificaciones están activas.",
-        tag: "contable-test",
-        title: "Contable",
-        url: "/app",
-      })
-
-      result.sent += 1
-      await markSubscriptionUsed(subscription.id)
-    } catch (error) {
-      result.failed += 1
-      await markSubscriptionFailed(subscription.id, error)
-    }
   }
 
   if (result.sent === 0) {
@@ -171,98 +151,18 @@ export async function sendTestPush(req: Request, res: Response) {
   res.json({ ok: true, result })
 }
 
+export async function sendAlertPush(req: Request, res: Response) {
+  const userId = getRequestUserId(req)
+  const { alerts } = pushAlertsSchema.parse(req.body)
+  const result = await sendPushToUser(userId, buildRiskAlertsPush(alerts))
+
+  res.json({ ok: true, result })
+}
+
 function getRequestUserId(req: Request) {
   if (!req.userId) {
     throw new ArcaError("Unauthorized", 401)
   }
 
   return req.userId
-}
-
-function toWebPushSubscription(
-  subscription: PushSubscriptionRow
-): PushSubscription {
-  return {
-    endpoint: subscription.endpoint,
-    keys: {
-      auth: subscription.auth,
-      p256dh: subscription.p256dh,
-    },
-  }
-}
-
-async function markSubscriptionUsed(subscriptionId: string) {
-  const { error } = await getSupabaseAdmin()
-    .from("push_subscriptions")
-    .update({
-      failed_at: null,
-      failure_reason: null,
-      last_used_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", subscriptionId)
-
-  if (error) {
-    console.error("push.subscription_mark_used_failed", {
-      code: error.code,
-      message: error.message,
-    })
-  }
-}
-
-async function markSubscriptionFailed(
-  subscriptionId: string,
-  error: unknown
-) {
-  const summary = getPushErrorSummary(error)
-  const updatePayload: {
-    active?: boolean
-    failed_at: string
-    failure_reason: string
-    updated_at: string
-  } = {
-    failed_at: new Date().toISOString(),
-    failure_reason: summary.message,
-    updated_at: new Date().toISOString(),
-  }
-
-  if (isExpiredPushSubscription(error)) {
-    updatePayload.active = false
-  }
-
-  const { error: updateError } = await getSupabaseAdmin()
-    .from("push_subscriptions")
-    .update(updatePayload)
-    .eq("id", subscriptionId)
-
-  if (updateError) {
-    console.error("push.subscription_mark_failed_failed", {
-      code: updateError.code,
-      message: updateError.message,
-    })
-  }
-
-  console.error("push.send_failed", summary)
-}
-
-function pushStorageError(error: { code?: string; message?: string }) {
-  if (
-    error.code === "42P01" ||
-    error.code === "PGRST205" ||
-    error.message?.includes("push_subscriptions") === true
-  ) {
-    return new ArcaError(
-      "Falta aplicar la migración de notificaciones push antes de usar esta función.",
-      500,
-      {
-        code: error.code,
-        message: error.message,
-      }
-    )
-  }
-
-  return new ArcaError("No pudimos guardar las notificaciones push.", 500, {
-    code: error.code,
-    message: error.message,
-  })
 }

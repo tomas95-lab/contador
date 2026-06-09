@@ -25,10 +25,12 @@ import {
   getArcaDestinationCountries,
   getArcaPointOfSales,
   getHistoricalArcaInvoices,
+  reconcileInvoice,
 } from "./routes/invoices.js"
 import {
   getPushStatus,
   getPushVapidPublicKey,
+  sendAlertPush,
   sendTestPush,
   subscribeToPush,
   unsubscribeFromPush,
@@ -111,6 +113,17 @@ const pushTestRateLimit = rateLimit({
   standardHeaders: "draft-8",
   windowMs: 60 * 1000,
 })
+const pushAlertRateLimit = rateLimit({
+  keyGenerator: getAuthenticatedRateLimitKey,
+  legacyHeaders: false,
+  limit: 10,
+  message: {
+    error:
+      "Enviamos demasiadas alertas de notificación. Esperá un minuto y volvé a intentar.",
+  },
+  standardHeaders: "draft-8",
+  windowMs: 60 * 1000,
+})
 
 app.use(globalRateLimit)
 app.use(
@@ -137,6 +150,7 @@ app.post(
 )
 app.post("/api/credentials/save", saveArcaCredentials)
 app.post("/api/invoices/emit", invoiceEmitRateLimit, emitInvoice)
+app.post("/api/invoices/reconcile", invoiceEmitRateLimit, reconcileInvoice)
 app.get(
   "/api/invoices/arca/annual-summary",
   arcaQueryRateLimit,
@@ -162,6 +176,7 @@ app.get("/api/push/public-key", getPushVapidPublicKey)
 app.post("/api/push/subscribe", subscribeToPush)
 app.post("/api/push/unsubscribe", unsubscribeFromPush)
 app.post("/api/push/test", pushTestRateLimit, sendTestPush)
+app.post("/api/push/alerts", pushAlertRateLimit, sendAlertPush)
 
 async function authenticateJwt(
   req: Request,

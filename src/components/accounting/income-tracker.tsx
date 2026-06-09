@@ -33,7 +33,6 @@ import {
 import type {
   IncomeMethod,
   IncomePayment,
-  InvoiceStatus,
   TaxCategory,
 } from "@/types/accounting"
 
@@ -181,20 +180,9 @@ export function IncomeTracker({
               </div>
               <div className="space-y-2">
                 <Label>Factura</Label>
-                <Select
-                  value={draft.invoiceStatus}
-                  onValueChange={(value) =>
-                    updateDraft("invoiceStatus", value as InvoiceStatus)
-                  }
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pendiente">Pendiente</SelectItem>
-                    <SelectItem value="facturado">Facturado</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="flex h-9 items-center rounded-md border bg-muted/30 px-3 text-sm text-muted-foreground">
+                  Pendiente de facturar
+                </div>
               </div>
             </div>
             <Button className="w-full" disabled={isSaving} type="submit">

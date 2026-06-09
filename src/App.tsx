@@ -18,7 +18,7 @@ import {
   getDemoSessionState,
 } from "@/data/demo"
 import { getTodayInputValue } from "@/lib/accounting"
-import { emitArcaInvoice } from "@/lib/arca-api"
+import { emitArcaInvoice, reconcileArcaInvoice } from "@/lib/arca-api"
 import { fetchArcaCredentialsStatus } from "@/lib/arca-credentials-api"
 import { isSupabaseConfigured, supabase } from "@/lib/supabase"
 import {
@@ -389,8 +389,8 @@ export default function App() {
 
       try {
         const [
-          remotePayments,
-          remoteInvoices,
+          initialRemotePayments,
+          initialRemoteInvoices,
           remoteCategory,
           remoteAllCategories,
           remoteMessages,
@@ -405,6 +405,30 @@ export default function App() {
           fetchFiscalProfile(),
           fetchTaxPayments(),
         ])
+        let remotePayments = initialRemotePayments
+        let remoteInvoices = initialRemoteInvoices
+
+        const reconciliationResults = await Promise.allSettled(
+          remotePayments
+            .filter((payment) => payment.invoiceStatus === "emitiendo")
+            .map((payment) => reconcileArcaInvoice(payment.id))
+        )
+        const reconciledAny = reconciliationResults.some(
+          (result) =>
+            result.status === "fulfilled" &&
+            (result.value.status === "reconciled" ||
+              result.value.status === "already-persisted")
+        )
+
+        if (reconciledAny) {
+          const [refreshedPayments, refreshedInvoices] = await Promise.all([
+            fetchPayments(),
+            fetchInvoices(),
+          ])
+
+          remotePayments = refreshedPayments
+          remoteInvoices = refreshedInvoices
+        }
 
         if (cancelled) {
           return
@@ -748,8 +772,10 @@ export default function App() {
           issueDate: arcaInvoice.invoice.date ?? getTodayInputValue(),
           client:
             invoiceKind === "E"
-              ? options.foreignClientName ?? options.clientName ?? payment.client
-              : options.clientName ?? payment.client,
+              ? (options.foreignClientName ??
+                options.clientName ??
+                payment.client)
+              : (options.clientName ?? payment.client),
           description: arcaInvoice.invoice.description,
           amount: arcaInvoice.invoice.amount,
           currencyId: arcaInvoice.invoice.currencyId,

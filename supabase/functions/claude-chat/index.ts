@@ -91,7 +91,10 @@ type JwtHeader = {
 }
 
 type JwtPayload = {
+  aud?: string | string[]
   exp?: number
+  iss?: string
+  role?: string
   sub?: string
 }
 
@@ -110,6 +113,31 @@ class UnauthorizedError extends Error {
   }
 }
 
+class BadRequestError extends Error {
+  constructor(message = "Invalid request") {
+    super(message)
+    this.name = "BadRequestError"
+  }
+}
+
+class PayloadTooLargeError extends Error {
+  constructor() {
+    super("Payload too large")
+    this.name = "PayloadTooLargeError"
+  }
+}
+
+class RateLimitError extends Error {
+  constructor() {
+    super("Too many requests")
+    this.name = "RateLimitError"
+  }
+}
+
+const MAX_REQUEST_CHARACTERS = 100_000
+const MAX_CONTENT_CHARACTERS = 2_000
+const MAX_MESSAGE_CHARACTERS = 2_000
+const MAX_ARCA_CONTEXT_CHARACTERS = 20_000
 const localDevelopmentOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
@@ -216,8 +244,14 @@ Deno.serve(async (request) => {
     })
   }
 
+  if (request.method !== "POST") {
+    return json({ error: "Method not allowed" }, 405, corsHeaders)
+  }
+
   try {
+    enforceDeclaredContentLength(request)
     const authContext = await authenticateRequest(request)
+    await enforceChatRateLimit(authContext.userId)
     const apiKey = Deno.env.get("ANTHROPIC_API_KEY")
     const model = Deno.env.get("CLAUDE_MODEL") ?? "claude-sonnet-4-6"
 
@@ -225,7 +259,7 @@ Deno.serve(async (request) => {
       return json({ error: "Missing ANTHROPIC_API_KEY" }, 500, corsHeaders)
     }
 
-    const payload = (await request.json()) as ChatPayload
+    const payload = parseChatPayload(await request.json())
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -268,7 +302,12 @@ Deno.serve(async (request) => {
     if (!response.ok) {
       const details = await response.text()
 
-      return json({ error: details }, response.status, corsHeaders)
+      console.error("Anthropic request failed", response.status, details)
+      return json(
+        { error: "No pudimos generar una respuesta en este momento." },
+        502,
+        corsHeaders
+      )
     }
 
     const data = (await response.json()) as ClaudeResponse
@@ -280,13 +319,20 @@ Deno.serve(async (request) => {
       return json({ error: "Unauthorized" }, 401, corsHeaders)
     }
 
-    return json(
-      {
-        error: error instanceof Error ? error.message : "Unknown error",
-      },
-      500,
-      corsHeaders
-    )
+    if (error instanceof BadRequestError) {
+      return json({ error: error.message }, 400, corsHeaders)
+    }
+
+    if (error instanceof PayloadTooLargeError) {
+      return json({ error: error.message }, 413, corsHeaders)
+    }
+
+    if (error instanceof RateLimitError) {
+      return json({ error: error.message }, 429, corsHeaders)
+    }
+
+    console.error("claude-chat failed", error)
+    return json({ error: "Internal server error" }, 500, corsHeaders)
   }
 })
 
@@ -315,7 +361,12 @@ function parseAllowedOrigins(value: string) {
     .map((origin) => origin.trim().replace(/\/+$/, ""))
     .filter(Boolean)
 
-  return new Set([...origins, ...localDevelopmentOrigins])
+  const developmentOrigins =
+    Deno.env.get("ENVIRONMENT")?.toLowerCase() === "production"
+      ? []
+      : localDevelopmentOrigins
+
+  return new Set([...origins, ...developmentOrigins])
 }
 
 async function authenticateRequest(request: Request): Promise<AuthContext> {
@@ -367,7 +418,13 @@ async function verifyJwt(token: string): Promise<JwtPayload> {
       throw new UnauthorizedError()
     }
 
-    if (!payload.exp || payload.exp <= Math.floor(Date.now() / 1000)) {
+    if (
+      !payload.exp ||
+      payload.exp <= Math.floor(Date.now() / 1000) ||
+      payload.iss !== getSupabaseIssuer() ||
+      !hasAuthenticatedAudience(payload.aud) ||
+      payload.role !== "authenticated"
+    ) {
       throw new UnauthorizedError()
     }
 
@@ -480,7 +537,10 @@ function buildPrompt({
 }: ChatPayload) {
   const history = messages
     .slice(-8)
-    .map((message) => `${message.role}: ${message.content}`)
+    .map(
+      (message) =>
+        `${message.role}: ${message.content.slice(0, MAX_MESSAGE_CHARACTERS)}`
+    )
     .join("\n")
 
   return [
@@ -497,7 +557,7 @@ function buildPrompt({
     JSON.stringify(riskSnapshot ?? null, null, 2),
     "",
     "Datos ARCA autorizados por el usuario:",
-    JSON.stringify(arcaContext ?? null, null, 2),
+    formatJsonForPrompt(arcaContext ?? null, MAX_ARCA_CONTEXT_CHARACTERS),
     "",
     "Historial reciente:",
     history || "Sin historial previo.",
@@ -505,6 +565,118 @@ function buildPrompt({
     "Pregunta actual:",
     content,
   ].join("\n")
+}
+
+function parseChatPayload(value: unknown): ChatPayload {
+  if (!isRecord(value)) {
+    throw new BadRequestError()
+  }
+
+  const serialized = JSON.stringify(value)
+
+  if (serialized.length > MAX_REQUEST_CHARACTERS) {
+    throw new PayloadTooLargeError()
+  }
+
+  if (
+    typeof value.content !== "string" ||
+    value.content.trim().length === 0 ||
+    value.content.length > MAX_CONTENT_CHARACTERS ||
+    !isRecord(value.metrics)
+  ) {
+    throw new BadRequestError()
+  }
+
+  const messages = Array.isArray(value.messages)
+    ? value.messages
+        .filter(
+          (message): message is ChatMessage =>
+            isRecord(message) &&
+            (message.role === "assistant" || message.role === "user") &&
+            typeof message.content === "string"
+        )
+        .slice(-8)
+    : []
+
+  return {
+    ...(value as ChatPayload),
+    content: value.content.trim(),
+    messages,
+  }
+}
+
+function enforceDeclaredContentLength(request: Request) {
+  const contentLength = Number(request.headers.get("Content-Length") ?? 0)
+
+  if (
+    Number.isFinite(contentLength) &&
+    contentLength > MAX_REQUEST_CHARACTERS
+  ) {
+    throw new PayloadTooLargeError()
+  }
+}
+
+async function enforceChatRateLimit(userId: string) {
+  const supabaseUrl = requiredEnv("SUPABASE_URL")
+  const serviceRoleKey = requiredEnv("SUPABASE_SERVICE_ROLE_KEY")
+  const response = await fetch(
+    `${supabaseUrl.replace(/\/+$/, "")}/rest/v1/rpc/consume_claude_chat_rate_limit`,
+    {
+      method: "POST",
+      headers: {
+        apikey: serviceRoleKey,
+        Authorization: `Bearer ${serviceRoleKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        p_limit: 20,
+        p_user_id: userId,
+        p_window_seconds: 60,
+      }),
+    }
+  )
+
+  if (!response.ok) {
+    throw new Error("Could not verify chat rate limit")
+  }
+
+  if ((await response.json()) !== true) {
+    throw new RateLimitError()
+  }
+}
+
+function getSupabaseIssuer() {
+  return `${requiredEnv("SUPABASE_URL").replace(/\/+$/, "")}/auth/v1`
+}
+
+function hasAuthenticatedAudience(audience: JwtPayload["aud"]) {
+  return Array.isArray(audience)
+    ? audience.includes("authenticated")
+    : audience === "authenticated"
+}
+
+function requiredEnv(name: string) {
+  const value = Deno.env.get(name)
+
+  if (!value) {
+    throw new Error(`Missing ${name}`)
+  }
+
+  return value
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function formatJsonForPrompt(value: unknown, maxCharacters: number) {
+  const serialized = JSON.stringify(value, null, 2)
+
+  if (serialized.length <= maxCharacters) {
+    return serialized
+  }
+
+  return `${serialized.slice(0, maxCharacters)}\n...[contexto truncado]`
 }
 
 function extractClaudeMessage(data: ClaudeResponse) {

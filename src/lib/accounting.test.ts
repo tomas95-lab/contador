@@ -5,6 +5,7 @@ import {
   getFinancialMetrics,
   getFiscalEvaluationPeriod,
   getProactiveAlerts,
+  getTaxDueHistory,
 } from "@/lib/accounting"
 import type {
   IncomePayment,
@@ -115,6 +116,50 @@ describe("getFinancialMetrics", () => {
 
     expect(metrics.annualTotal).toBe(400)
   })
+
+  it("excluye cobros pendientes y cuenta cobros con CAE", () => {
+    const pendingWithCae = payment(300, "2026-03-15", "pendiente")
+    pendingWithCae.cae = "12345678901234"
+
+    const metrics = getFinancialMetrics(
+      [
+        payment(700, "2026-03-15", "pendiente"),
+        payment(200, "2026-03-15", "facturado"),
+        pendingWithCae,
+      ],
+      categoryA,
+      referenceDate
+    )
+
+    expect(metrics.annualTotal).toBe(500)
+  })
+})
+
+describe("getTaxDueHistory", () => {
+  it("marca cuotas vencidas sin registro como overdue", () => {
+    const history = getTaxDueHistory(categoryA, referenceDate)
+
+    expect(history).toHaveLength(5)
+    expect(history.every((due) => due.status === "overdue")).toBe(true)
+  })
+
+  it("solo marca paid cuando existe un pago registrado", () => {
+    const history = getTaxDueHistory(categoryA, referenceDate, [
+      {
+        amount: 100,
+        id: "payment-1",
+        monthKey: "2026-03",
+        paidAt: "2026-03-20",
+      },
+    ])
+
+    expect(history.find((due) => due.monthKey === "2026-03")?.status).toBe(
+      "paid"
+    )
+    expect(history.find((due) => due.monthKey === "2026-04")?.status).toBe(
+      "overdue"
+    )
+  })
 })
 
 describe("getBillingScenario", () => {
@@ -178,9 +223,9 @@ describe("getFiscalEvaluationPeriod", () => {
   })
 
   it("isFilingWindow es false en otros meses", () => {
-    expect(getFiscalEvaluationPeriod(new Date(2026, 4, 30)).isFilingWindow).toBe(
-      false
-    )
+    expect(
+      getFiscalEvaluationPeriod(new Date(2026, 4, 30)).isFilingWindow
+    ).toBe(false)
   })
 })
 
