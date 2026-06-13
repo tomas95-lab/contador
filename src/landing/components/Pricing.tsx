@@ -1,6 +1,5 @@
 import { Check, Crown, Rocket, Sparkles, Star } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -63,48 +62,56 @@ export function Pricing({ onOpenWaitlist }: PricingProps) {
             <Card
               className={`landing-hover-lift relative rounded-[2rem] p-4 md:py-6 ${
                 plan.badge
-                  ? "landing-glass scale-[1.01] overflow-visible border-2 border-[#185FA5]/25 shadow-2xl"
+                  ? "landing-glass scale-[1.01] border-2 border-[#185FA5]/25 shadow-2xl"
                   : "border border-[#DDE8FF] bg-white shadow-lg"
               }`}
               key={plan.name}
             >
-              {plan.badge ? (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                  <div className="landing-primary-gradient flex items-center rounded-full px-5 py-2 text-sm font-bold text-white shadow-lg">
-                    <Crown className="mr-2 size-4" />
-                    {plan.badge}
-                  </div>
+              <CardHeader className="pt-1 text-center">
+                <div className="landing-text-gradient text-4xl leading-none font-black tracking-tight md:text-5xl">
+                  30 días gratis
                 </div>
-              ) : null}
+                <div className="mt-2 text-sm font-semibold text-[#2C8A62]">
+                  Probalo sin tarjeta
+                </div>
 
-              <CardHeader>
-                <div className="mx-auto mb-4 grid size-16 place-items-center rounded-2xl shadow-lg">
+                {plan.badge ? (
+                  <div className="mt-4 flex justify-center">
+                    <div className="landing-primary-gradient flex items-center rounded-full px-5 py-2 text-sm font-bold text-white shadow-lg">
+                      <Crown className="mr-2 size-4" />
+                      {plan.badge}
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="mt-5 flex items-center justify-center gap-3">
                   <div
-                    className={`grid size-16 place-items-center rounded-2xl ${
+                    className={`grid size-12 shrink-0 place-items-center rounded-2xl shadow-lg ${
                       plan.badge
                         ? "landing-primary-gradient text-white"
                         : "bg-[#DDE8FF] text-[#185FA5]"
                     }`}
                   >
                     {index === 0 ? (
-                      <Rocket className="size-8" />
+                      <Rocket className="size-6" />
                     ) : (
-                      <Crown className="size-8" />
+                      <Crown className="size-6" />
                     )}
                   </div>
-                </div>
-                <div className="text-center">
-                  <CardTitle className="text-2xl font-black text-[#1F1F1F]">
+                  <CardTitle className="text-xl font-black text-[#1F1F1F] md:text-2xl">
                     {plan.name}
                   </CardTitle>
-                  {plan.badge ? (
-                    <Badge className="mt-3 bg-[#639922]/15 text-[#477012] md:hidden">
-                      {plan.badge}
-                    </Badge>
-                  ) : null}
                 </div>
-                <div className="pt-5 text-center text-4xl font-black text-[#1F1F1F]">
+
+                <div className="mt-5 text-xl font-bold text-[#1F1F1F] md:text-2xl">
                   {plan.price}
+                </div>
+                <div className="mt-1 text-xs text-[#6B6B6B]">
+                  Menos que 10 minutos con un contador.
+                </div>
+                <div className="mt-4 rounded-2xl border border-[#FFA75D]/25 bg-[#FFA75D]/10 px-4 py-3 text-center text-xs leading-5 font-semibold text-[#8A4B13]">
+                  Recategorización de julio en semanas. El radar sirve si lo
+                  prendés antes.
                 </div>
               </CardHeader>
               <CardContent>
@@ -122,9 +129,9 @@ export function Pricing({ onOpenWaitlist }: PricingProps) {
                   ))}
                 </ul>
               </CardContent>
-              <CardFooter className="border-0 bg-transparent">
+              <CardFooter className="mt-auto flex-col gap-3 border-0 bg-transparent">
                 <Button
-                  className={`h-12 w-full rounded-2xl font-bold ${
+                  className={`min-h-12 w-full rounded-2xl px-3 py-3 leading-tight font-bold whitespace-normal ${
                     plan.badge
                       ? "landing-primary-gradient text-white shadow-xl hover:opacity-95"
                       : "border-2 border-[#185FA5] bg-white text-[#185FA5] hover:bg-[#185FA5]/5"
@@ -135,15 +142,18 @@ export function Pricing({ onOpenWaitlist }: PricingProps) {
                   onClick={onOpenWaitlist}
                 >
                   <Sparkles className="size-4" />
-                  Probar radar fiscal
+                  Empezar gratis — 30 días sin tarjeta
                 </Button>
+                <p className="text-center text-xs leading-5 text-[#6B6B6B]">
+                  Si no te sirve en 30 días, te devolvemos todo. Sin preguntas.
+                </p>
               </CardFooter>
             </Card>
           ))}
         </div>
 
         <div className="mt-14 text-center">
-          <div className="inline-flex max-w-3xl items-center rounded-3xl border border-[#FFA75D]/25 bg-[#FFA75D]/10 px-6 py-4 text-left text-sm font-semibold text-[#8A4B13] md:text-base">
+          <div className="inline-flex max-w-3xl items-center rounded-3xl border border-[#FFA75D]/25 bg-[#FFA75D]/10 px-6 py-4 text-center text-sm font-semibold text-[#8A4B13] md:text-base">
             <Sparkles className="mr-3 size-5 shrink-0 text-[#FFA75D]" />
             Oferta de lanzamiento: los primeros usuarios acceden a 30 días
             gratis y onboarding guiado.
