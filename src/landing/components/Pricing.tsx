@@ -71,9 +71,6 @@ export function Pricing({ onOpenWaitlist }: PricingProps) {
                 <div className="landing-text-gradient text-4xl leading-none font-black tracking-tight md:text-5xl">
                   30 días gratis
                 </div>
-                <div className="mt-2 text-sm font-semibold text-[#2C8A62]">
-                  Probalo sin tarjeta
-                </div>
 
                 {plan.badge ? (
                   <div className="mt-4 flex justify-center">
@@ -142,7 +139,7 @@ export function Pricing({ onOpenWaitlist }: PricingProps) {
                   onClick={onOpenWaitlist}
                 >
                   <Sparkles className="size-4" />
-                  Empezar gratis — 30 días sin tarjeta
+                  Empezar gratis — 30 días
                 </Button>
                 <p className="text-center text-xs leading-5 text-[#6B6B6B]">
                   Si no te sirve en 30 días, te devolvemos todo. Sin preguntas.
