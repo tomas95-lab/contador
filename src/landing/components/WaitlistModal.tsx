@@ -78,16 +78,16 @@ export function WaitlistModal({ open, onOpenChange }: WaitlistModalProps) {
       <DialogContent className="border-[#DDE8FF] bg-white text-[#1F1F1F] shadow-xl">
         <DialogHeader>
           <DialogTitle className="text-2xl font-black">
-            Probá el radar fiscal
+            Acceso inmediato
           </DialogTitle>
           <DialogDescription className="text-[#6B6B6B]">
-            Te escribimos apenas abramos nuevos accesos a Contable.
+            Completá tus datos y en segundos estás adentro. 30 días gratis.
           </DialogDescription>
         </DialogHeader>
 
         {submitted ? (
           <div className="rounded-2xl border border-[#3CC68A]/25 bg-[#3CC68A]/10 p-4 text-sm font-semibold text-[#2C8A62]">
-            ¡Listo! Te avisamos cuando abramos.
+            ¡Listo! Ya registramos tu acceso.
           </div>
         ) : (
           <form className="space-y-4" onSubmit={handleSubmit}>
